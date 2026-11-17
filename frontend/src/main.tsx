@@ -337,7 +337,8 @@ function App() {
                 .sort(
                   (a, b) =>
                     Number(isRapid(b.time_control)) -
-                    Number(isRapid(a.time_control)),
+                    Number(isRapid(a.time_control)) ||
+                    b.played_at.localeCompare(a.played_at) || b.id - a.id,
                 )
                 .map((g) => (
                   <button
