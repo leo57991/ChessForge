@@ -411,7 +411,7 @@ export async function browserAPI(path: string, body?: any): Promise<any> {
       const id = state.next++;
       state.details.push({
         initial_fen: p.initial_fen,
-        game: { ...p.game, id },
+        game: { ...p.game, source: body.source || "pgn", id },
         moves: p.moves.map((m) => ({ ...m, id: state.next++, game_id: id })),
         runs: [],
       });
@@ -421,6 +421,15 @@ export async function browserAPI(path: string, body?: any): Promise<any> {
     await save();
     return { imported, duplicates };
   }
+  if(path==='/sync') {
+    const {fetchPublicPGN}=await import('./sync');
+    const pgn=await fetchPublicPGN(body.source,body.username);
+    return pgn.trim()?browserAPI('/import',{pgn,source:body.source}):{imported:0,duplicates:0};
+  }
+  if(path==='/review-data')return structuredClone(state.details.flatMap(d=>{
+    const run=d.runs.find(r=>r.status==='completed');
+    return run?[{game:d.game,moves:d.moves,run,analyses:state.analyses[run.id]||[]}]:[];
+  }));
   const gm = path.match(/^\/games\/(\d+)(\/analyze)?$/);
   if (gm) {
     const d = state.details.find((d) => d.game.id === Number(gm[1]));

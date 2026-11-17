@@ -13,6 +13,7 @@ import {
 } from "./types";
 import { browserAPI } from "./offline";
 import "./style.css";
+import {ReviewHome} from "./ReviewHome";
 const browserMode = import.meta.env.VITE_BROWSER_MODE === "true";
 async function api(path: string, body?: unknown) {
   if (browserMode) return browserAPI(path, body);
@@ -62,7 +63,7 @@ function App() {
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
   }, []);
-  async function select(id: number) {
+  async function select(id: number, position=0, selectedRun?:number) {
     const seq = ++sequence.current;
     setDetail(null);
     setRun(null);
@@ -71,7 +72,7 @@ function App() {
     const d = await api("/games/" + id);
     if (seq !== sequence.current) return;
     setDetail(d);
-    setPly(0);
+    setPly(position);
     setResearch(null);
     setPvIndex(null);
     setPlaying(false);
@@ -82,7 +83,7 @@ function App() {
         ? "black"
         : "white",
     );
-    if (d.runs.length) await loadRun(d.runs[0].id, seq);
+    if (selectedRun || d.runs.length) await loadRun(selectedRun || d.runs[0].id, seq);
   }
   async function loadRun(id: number, seq = sequence.current) {
     const d = await api("/runs/" + id);
@@ -257,6 +258,7 @@ function App() {
             {notice}
           </div>
         )}
+        <ReviewHome games={games} hidden={!!detail} api={api} refresh={refresh} open={(id,ply,runId)=>{void act(()=>select(id,ply,runId))}}/>
         {!detail ? (
           <>
             <section
@@ -792,7 +794,7 @@ function App() {
         <footer>
           CHESSFORGE{" "}
           <span>
-            只分析已結束的棋局 · 標籤採自訂門檻，並非 Chess.com 官方分類
+            獨立開源工具，與 Chess.com 無隸屬關係 · 只分析已結束棋局
           </span>
         </footer>
       </main>

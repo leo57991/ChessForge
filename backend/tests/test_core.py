@@ -92,6 +92,7 @@ def test_scores():
 
 
 def test_real_engine_analysis_cache_and_cancel():
+    import_pgn(MATE)
     engine_path()
     with Session() as s:
         g = s.query(Game).first()
@@ -145,3 +146,26 @@ def test_api_auth_and_origin(monkeypatch):
             ).status_code
             == 200
         )
+
+
+def test_sync_uses_only_completed_standard_games():
+    import httpx
+    from sync import fetch_pgn
+    urls=[]
+    def handler(request):
+        urls.append(str(request.url))
+        if str(request.url).endswith('/archives'):
+            return httpx.Response(200,json={'archives':['https://api.chess.com/pub/player/hugemudraven/games/2026/11']})
+        return httpx.Response(200,json={'games':[{'rules':'chess','end_time':1,'pgn':MATE},{'rules':'chess','pgn':'LIVE'},{'rules':'chess960','end_time':2,'pgn':'VARIANT'}]})
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert fetch_pgn('chesscom','Hugemudraven',client)==MATE
+    assert len(urls)==2
+
+
+def test_sync_failure_preserves_existing_data():
+    import httpx
+    from sync import fetch_pgn
+    with Session() as s:before=s.query(Game).count()
+    with httpx.Client(transport=httpx.MockTransport(lambda _:httpx.Response(429))) as client:
+        with pytest.raises(ValueError,match='429'):fetch_pgn('chesscom','Hugemudraven',client)
+    with Session() as s:assert s.query(Game).count()==before

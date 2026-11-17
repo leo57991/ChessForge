@@ -251,6 +251,37 @@ def cancel(run_id: int):
         return serialize(r)
 
 
+class SyncBody(BaseModel):
+    source: str = 'chesscom'
+    username: str = 'Hugemudraven'
+
+
+@app.post('/api/sync')
+def sync_games(body: SyncBody):
+    from sync import fetch_pgn
+    try:
+        pgn = fetch_pgn(body.source, body.username)
+        return import_pgn(pgn, body.source) if pgn.strip() else {'imported':0,'duplicates':0}
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.get('/api/review-data')
+def review_data():
+    with Session() as s:
+        seen = set()
+        result = []
+        for r in s.query(Run).filter_by(status='completed').order_by(Run.id.desc()):
+            if r.game_id in seen:continue
+            seen.add(r.game_id)
+            game = serialize(s.get(Game,r.game_id))
+            game.pop('pgn',None)
+            result.append({'game':game,'run':serialize(r),
+                'moves':[serialize(m) for m in s.query(Move).filter_by(game_id=r.game_id)],
+                'analyses':[serialize(a) for a in s.query(Analysis).filter_by(analysis_run_id=r.id)]})
+        return result
+
+
 # Serve the production UI from the same origin; no permissive CORS.
 static = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if static.exists():

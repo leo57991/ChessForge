@@ -6,7 +6,7 @@
 
 **GitHub Pages**：https://leo57991.github.io/ChessForge/
 
-直接在 Windows / Android 瀏覽器開啟 → 匯入 PGN → 選擇棋局 → 分析。使用單執行緒 Stockfish 17.1 Lite WASM，不需要伺服器、密碼或付費 AI。首次使用須下載約 7 MB 引擎。棋譜與結果存在該瀏覽器的 IndexedDB；不同裝置不共用，清除網站資料會刪除紀錄。關閉頁面會停止分析，重開後可重試。Pages 不能執行 Python，因此其儲存與引擎實作不同於本機版，但共用復盤介面與分類門檻。
+直接在 Windows / Android 瀏覽器開啟 → 自動同步 Chess.com（或匯入 PGN）→「分析最近 5 盤，幫我挑局面」→ 選弱點項目直接復盤。使用單執行緒 Stockfish 17.1 Lite WASM，不需要伺服器、密碼或付費 AI。首次使用須下載約 7 MB 引擎。棋譜與結果存在該瀏覽器的 IndexedDB；不同裝置不共用，清除網站資料會刪除紀錄。關閉頁面會停止分析，重開後可重試。Pages 不能執行 Python，因此其儲存與引擎實作不同於本機版，但共用復盤介面與分類門檻。
 
 **Windows 本機完整版**：Python + FastAPI + SQLAlchemy + SQLite + python-chess + Stockfish 19；React + TypeScript + Vite + react-chessboard。
 
@@ -86,10 +86,25 @@ npm run build:pages -- --base=/ChessForge/
 
 ## 目前範圍
 
-Phase 1 已實作，並提前加入 Pages、PV 播放、評估圖、LAN 啟動、SQLite 快取。Chess.com / Lichess 公開 API 同步與更完整的戰術原因辨識是後續項目。
+Phase 1 已實作，並加入 Pages、PV 播放、評估圖、LAN 啟動、SQLite 快取、Chess.com / Lichess 公開 API 同步與弱點復盤首頁。更完整的雙攻、交換、王安全原因辨識仍是後續項目。
 
 資料來源：只接受已結束 PGN。匯入結果標記不能證明手動檔案確實來自已結束對局；使用者應只匯入已結束的對局。不得用於正在進行的真人棋局。
 
 引擎介接參考：https://python-chess.readthedocs.io/en/stable/engine.html
 
 授權 GPL-3.0-or-later；第三方來源見 THIRD_PARTY.md。
+
+## 自動同步與弱點復盤
+
+- 預設帳號：Chess.com `Hugemudraven`、Lichess `oo09080983`。不需要密碼。
+- 開啟頁面時預設自動同步 Chess.com；最多每 30 分鐘觸發一次，可取消勾選。手動同步不受此間隔限制。頁面關閉後不會繼續同步。
+- Chess.com 串行下載最近 3 個有棋局的月份，最多匯入最近 200 盤已完成的標準棋局；Lichess 手動同步最近 100 盤，明確排除 ongoing games。
+- 官方 API 有快取，剛結束的棋局可能需要等待平台更新。403、404、429、逾時或跨來源限制都會顯示錯誤，不刪除舊資料。
+- 首頁「分析最近 5 盤，幫我挑局面」會先挑未完成分析的中速棋，再按日期排序。序列執行快速分析、顯示逐盤進度，可停止。請保持頁面開啟。
+- 弱點只統計兩個帳號自己的走法，採每盤最新**已完成**分析，避免部分分析誤導統計。
+- 六個項目：漏看一步將死、未保護棋子、優勢變逼和、開局決策、中局決策、殘局決策。前三類有合法局面或引擎首選應手的直接證據；後三類只是階段分組，不聲稱已找到戰術原因。
+- 開局：前 20 半步；殘局：非兵非王棋子最多 4 枚，或無后且最多 6 枚；其餘中局。先判殘局再判開局。這是透明的產品分組規則，不是通用棋理定義。
+- 按估計勝算損失排列，每盤最多推薦 2 個局面，一次最多 6 個；顯示樣本數，避免將單盤結果當成長期能力。
+- 點局面卡直接跳到相應棋步及其已完成分析，可比較實際／最佳走法、播放變化、回到失誤前。
+
+ChessForge 與 Chess.com 無隸屬、合作或官方背書關係。API 文件：https://support.chess.com/en/articles/9650547-what-is-the-pubapi-and-how-do-i-use-it
