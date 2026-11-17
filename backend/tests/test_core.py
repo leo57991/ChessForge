@@ -169,3 +169,31 @@ def test_sync_failure_preserves_existing_data():
     with httpx.Client(transport=httpx.MockTransport(lambda _:httpx.Response(429))) as client:
         with pytest.raises(ValueError,match='429'):fetch_pgn('chesscom','Hugemudraven',client)
     with Session() as s:assert s.query(Game).count()==before
+
+
+def test_training_storage_revision_and_validation():
+    client = TestClient(app)
+    current = client.get('/api/training').json()
+    current['state']['settings']['dailySize'] = 10
+    saved = client.post('/api/training', json=current)
+    assert saved.status_code == 200
+    assert saved.json()['revision'] == current['revision'] + 1
+    assert client.get('/api/training').json()['state']['settings']['dailySize'] == 10
+    assert client.post('/api/training', json=current).status_code == 409
+    bad = saved.json()
+    bad['state']['version'] = 999
+    assert client.post('/api/training', json=bad).status_code == 422
+
+
+def test_training_move_check_is_completed_game_scoped():
+    client = TestClient(app)
+    assert client.post('/api/training/check', json={'game_id':999999,'ply':1,'uci':'e2e4'}).status_code == 404
+    import_pgn(MATE)
+    with Session() as s:
+        g = s.query(Game).filter(Game.pgn.contains('f3')).first()
+        game_id = g.id
+    assert client.post('/api/training/check', json={'game_id':game_id,'ply':1,'uci':'e2e5'}).status_code == 422
+    result = client.post('/api/training/check', json={'game_id':game_id,'ply':4,'uci':'d8h4'})
+    assert result.status_code == 200
+    assert result.json()['after']['mate'] == 0
+    assert result.json()['after']['white_wins'] is False

@@ -1,5 +1,6 @@
 import { Chess } from "chess.js";
 import { Analysis, Detail, Game, Move, PV, Run, Score } from "./types";
+import {emptyTraining, validateTraining, Envelope} from "./training";
 type Saved = {
   details: Detail[];
   analyses: Record<number, Analysis[]>;
@@ -393,6 +394,31 @@ async function analyze(d: Detail, r: Run) {
 }
 export async function browserAPI(path: string, body?: any): Promise<any> {
   await ready;
+  if (path === "/training") {
+    if(body) validateTraining(body.state);
+    return new Promise<Envelope>((resolve,reject)=>{
+      const tx=database.transaction('state',body?'readwrite':'readonly'),store=tx.objectStore('state');
+      const req=store.get('training');let result:Envelope;
+      req.onsuccess=()=>{const current:Envelope=req.result||{revision:0,state:emptyTraining()};
+        if(body&&body.revision!==current.revision){reject(new Error('另一個分頁已更新訓練進度，請重新載入後再試。'));tx.abort();return}
+        result=body?{revision:current.revision+1,state:validateTraining(body.state)}:current;
+        if(body)store.put(result,'training');
+      };
+      tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(new Error('訓練儲存失敗，請確認瀏覽器空間。'));tx.onabort=()=>reject(new Error('訓練資料未儲存，請重新載入。'));
+    });
+  }
+  if (path === '/training/check') {
+    const d=state.details.find(x=>x.game.id===body.game_id);
+    if(!d||!['1-0','0-1','1/2-1/2'].includes(d.game.result)||!Number.isInteger(body.ply)||body.ply<1||body.ply>d.moves.length)throw new Error('找不到已完成對局的棋步');
+    const b=new Chess(d.initial_fen),history:string[]=[];
+    for(const m of d.moves.slice(0,body.ply-1)){b.move(m.san);history.push(m.uci)}
+    const probe=new Chess(b.fen());probe.move({from:body.uci.slice(0,2),to:body.uci.slice(2,4),promotion:body.uci[4]});
+    const eng=new UCI();try{await eng.init();const before=await eng.evaluate(b,d.initial_fen,history,16,500,3);
+      b.move({from:body.uci.slice(0,2),to:body.uci.slice(2,4),promotion:body.uci[4]});history.push(body.uci);
+      const after=await eng.evaluate(b,d.initial_fen,history,16,500,1);
+      return {before:before[0].score,after:after[0].score,pv:after[0].pv,engine:'Stockfish 17.1 Lite'};
+    }finally{eng.close()}
+  }
   if (path === "/health")
     return { engine_ready: typeof WebAssembly !== "undefined" };
   if (path === "/games")

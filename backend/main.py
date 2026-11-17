@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from models import Base, engine, Session, Game, Move, Run, Analysis, serialize, now
 from analysis import work, engine_path
 
+from training_store import router as training_router
+
 pool = ThreadPoolExecutor(max_workers=1)
 mutation_lock = threading.Lock()
 
@@ -32,6 +34,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="ChessForge", lifespan=lifespan)
+app.include_router(training_router)
 
 
 @app.middleware("http")

@@ -1,0 +1,215 @@
+.training-hub {
+  border: 1px solid #536457;
+  border-radius: 18px;
+  padding: 24px;
+  margin: 24px 0;
+  background: linear-gradient(145deg, #26362e, #19251f);
+}
+.training-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #415047;
+}
+.training-tabs button[aria-pressed="true"] {
+  background: #c6dda5;
+  color: #1b291f;
+}
+.training-status {
+  font-size: 13px;
+  color: #c6dda5;
+}
+.daily-overview {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 28px;
+  padding: 24px 0;
+}
+.daily-overview aside {
+  border-left: 2px solid #a8c58f;
+  padding: 12px 22px;
+  background: #ffffff05;
+}
+.training-session {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 28px;
+  margin-top: 20px;
+}
+.training-board,
+.training-coach {
+  min-width: 0;
+}
+.training-coach {
+  background: #101c16;
+  padding: 20px;
+  border-radius: 12px;
+}
+.training-coach form,
+.training-coach label {
+  display: grid;
+  gap: 10px;
+}
+.training-coach input,
+.training-coach textarea,
+.training-settings textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.training-coach textarea {
+  min-height: 85px;
+}
+.training-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+.pv-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pv-text button {
+  padding: 7px;
+}
+.training-settings {
+  padding: 18px;
+  background: #101c16;
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+}
+.training-settings label {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.training-settings textarea {
+  min-height: 120px;
+}
+.opening-groups details {
+  background: #111e17;
+  border: 1px solid #3d5042;
+  border-radius: 10px;
+  margin: 12px 0;
+  padding: 16px;
+}
+.opening-groups summary {
+  cursor: pointer;
+}
+.opening-groups summary span {
+  display: block;
+  margin: 8px 0;
+  color: #b0c0b5;
+  font-size: 13px;
+}
+.opening-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #33473a;
+  padding: 14px 0;
+}
+.opening-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.opening-row small {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.training-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.training-metrics > div {
+  display: grid;
+  gap: 10px;
+  background: #101c16;
+  padding: 18px;
+  border-radius: 10px;
+}
+.training-metrics b {
+  font-size: 24px;
+  color: #c6dda5;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #3c4b41;
+}
+td small {
+  display: block;
+}
+caption {
+  text-align: left;
+  padding: 12px 0;
+  color: #c6dda5;
+}
+.attempt-row {
+  padding: 12px 0;
+  border-bottom: 1px solid #3c4b41;
+  display: grid;
+  gap: 6px;
+}
+.correct {
+  border-color: #b0d98e;
+}
+.training-hub button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+@media (max-width: 700px) {
+  .training-hub {
+    padding: 14px;
+    margin: 18px 0;
+  }
+  .training-session,
+  .daily-overview {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .training-coach {
+    padding: 14px;
+  }
+  .training-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .opening-row {
+    flex-wrap: wrap;
+  }
+  .opening-row > div {
+    flex-basis: 100%;
+  }
+  .training-tabs button {
+    flex: 1;
+    white-space: nowrap;
+  }
+  .training-status {
+    display: block;
+  }
+  .daily-overview aside {
+    padding: 12px;
+  }
+  .training-session .section-title {
+    flex-wrap: wrap;
+  }
+  .training-hub h2 {
+    font-size: 24px;
+  }
+}
+
+.weakness-home:has(.training-session) .review-evidence { display: none; }

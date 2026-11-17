@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {TrainingHub} from './TrainingHub';
 import {Game,labels} from './types';
 import {accounts,Platform} from './sync';
 import {buildReview,choosePositions,Category,ReviewedGame} from './weaknesses';
@@ -49,6 +50,8 @@ export function ReviewHome({games,hidden,api,refresh,open}:Props){
   <div className="sync-strip"><div><strong>連接你的公開對局</strong><small>Chess.com · {accounts.chesscom}　／　Lichess · {accounts.lichess}</small><label><input type="checkbox" checked={auto} onChange={e=>{setAuto(e.target.checked);localStorage.setItem('autoSyncChesscom',String(e.target.checked));if(e.target.checked)void sync('chesscom')}}/>開啟頁面時自動同步 Chess.com（最多每 30 分鐘一次）</label></div><div className="sync-actions"><button disabled={!!syncing} onClick={()=>sync('chesscom')}>{syncing==='chesscom'?'同步中…':'同步 Chess.com'}</button><button disabled={!!syncing} onClick={()=>sync('lichess')}>{syncing==='lichess'?'同步中…':'同步 Lichess'}</button></div></div>
   <p className="sync-note">最近 3 個有棋局的月份、最多 200 盤 Chess.com；Lichess 最近 100 盤。只下載已結束的標準棋局。{localStorage.getItem('lastSync:chesscom')&&` 上次成功同步：${localStorage.getItem('lastSync:chesscom')}`}</p>
   {error&&<div role="alert" className="alert">{error}<button onClick={()=>setError('')}>關閉</button></div>}{message&&<div role="status" className="notice">{message}</div>}
+  <TrainingHub data={data} api={api} open={open}/>
+  <div className="review-evidence">
   <div className="section-title"><div><div className="eyebrow">FOCUS ON YOUR NEXT IMPROVEMENT</div><h2>你的弱點，從自己的棋局找</h2></div><button className="primary" disabled={!!batch||!!syncing||!games.length} onClick={batchAnalyze}>✦ 分析最近 5 盤，幫我挑局面</button></div>
   <p>已分析你的 {review.analyzedGames} 盤、{review.ownMoves} 步，找到 {review.positions.length} 個值得重看的局面。只統計你的走法；這是目前樣本，不是固定能力評分。</p>
   {batch&&<div className="notice" role="status">{batch} <button onClick={stop}>停止分析</button><small>分析在本機進行，請保持頁面開啟。</small></div>}
@@ -56,5 +59,6 @@ export function ReviewHome({games,hidden,api,refresh,open}:Props){
   <div className="section-title"><h3>{category==='all'?'優先復盤這幾個局面':'這個項目的復盤局面'}</h3><button onClick={()=>setCategory('all')}>顯示全部</button></div>
   <div className="position-grid">{picks.map(p=><button className="position-card" key={`${p.game.id}-${p.move.id}`} onClick={()=>open(p.game.id,p.move.ply,p.runId)}><div><span className={`badge ${p.analysis.classification}`}>{labels[p.analysis.classification]}</span><small>{p.game.played_at}</small></div><strong>{Math.ceil(p.move.ply/2)}{p.move.ply%2?'.':'…'} {p.move.san} → {p.analysis.best_move_san}</strong><small>{p.game.white_username} vs {p.game.black_username}</small><p>{p.evidence}</p><footer>估計勝算損失 {p.analysis.win_chance_loss.toFixed(1)} 個百分點 <b>前往復盤 ↗</b></footer></button>)}</div>
   {!picks.length&&<div className="empty">{review.ownMoves?'這個項目目前沒有達到失誤門檻的局面。':'先同步對局，再按上方的分析按鈕，系統就會從你的棋譜挑出重點。'}</div>}
+ </div>
  </section>
 }
