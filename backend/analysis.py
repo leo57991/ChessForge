@@ -136,6 +136,7 @@ def work(run_id):
             moves = (
                 s.query(Move).filter_by(game_id=run.game_id).order_by(Move.ply).all()
             )
+            multipv = run.multipv
             depth = run.depth
             seconds = run.limits["seconds_per_position"]
             board = chess.Board(moves[0].fen_before)
@@ -145,11 +146,13 @@ def work(run_id):
                 r = s.get(Run, run_id)
                 r.engine_version = eng.id.get("name", "Stockfish")
                 s.commit()
+            previous_after = None
             for index, move in enumerate(moves):
                 with Session() as s:
                     if s.get(Run, run_id).status == "cancelled":
                         return
-                before = evaluate(eng, board, depth, seconds, 3)
+                # The previous post-move position is exactly this position, including history.
+                before = previous_after if previous_after is not None else evaluate(eng, board, depth, seconds, multipv)
                 best = before[0]["pv"][0]
                 actual = chess.Move.from_uci(move.uci)
                 color = board.turn
@@ -165,7 +168,8 @@ def work(run_id):
                         + "，此步直接吃子；是否能保住物質收益，請一起查看後續變化。"
                     )
                 board.push(actual)
-                after = evaluate(eng, board, depth, seconds, 1)
+                after = evaluate(eng, board, depth, seconds, multipv)
+                previous_after = after
                 label, loss, cp = classify(
                     before[0]["score"],
                     after[0]["score"],

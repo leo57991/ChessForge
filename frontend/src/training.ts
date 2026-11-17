@@ -1,4 +1,5 @@
 import { Chess } from "chess.js";
+import { identifyOpening, Opening } from "./openings";
 import { Analysis, Move, PV, Score } from "./types";
 import { categories, categorize, Category, ReviewedGame } from "./weaknesses";
 
@@ -94,16 +95,8 @@ export function acceptable(best: Score, other: Score, white: boolean) {
   return (best.cp! - other.cp!) * (white ? 1 : -1) <= 30;
 }
 export function openingName(d: ReviewedGame, color: "w" | "b") {
-  const start = new Chess().fen();
-  if (d.moves[0]?.fen_before !== start)
-    return `${color === "w" ? "白" : "黑"}方 · 自訂起始局面`;
-  return (
-    `${color === "w" ? "白" : "黑"}方 · ` +
-    d.moves
-      .slice(0, 4)
-      .map((m, i) => (i % 2 === 0 ? `${Math.floor(i / 2) + 1}.` : "") + m.san)
-      .join(" ")
-  );
+  const opening = identifyOpening(d.moves);
+  return `${color === "w" ? "白" : "黑"}方 · ${opening.name}${opening.eco ? ` · ${opening.eco} · ${opening.english}` : ""}`;
 }
 export function buildCards(data: ReviewedGame[]): Card[] {
   const map = new Map<string, Card>();
@@ -374,7 +367,15 @@ export function linePositions(c: Card, pv: PV) {
 export function openingGroups(data: ReviewedGame[], cards: Card[]) {
   const groups = new Map<
     string,
-    { name: string; games: number; wins: number; draws: number; cards: Card[] }
+    {
+      name: string;
+      opening: Opening;
+      color: "w" | "b";
+      games: number;
+      wins: number;
+      draws: number;
+      cards: Card[];
+    }
   >();
   for (const d of data) {
     if (d.run.status !== "completed" || !d.moves.length) continue;
@@ -386,6 +387,8 @@ export function openingGroups(data: ReviewedGame[], cards: Card[]) {
       const name = openingName(d, color),
         g = groups.get(name) || {
           name,
+          opening: identifyOpening(d.moves),
+          color,
           games: 0,
           wins: 0,
           draws: 0,
@@ -399,6 +402,7 @@ export function openingGroups(data: ReviewedGame[], cards: Card[]) {
   }
   // A transposed card can occur in multiple groups; reconstruct membership from its source FEN.
   for (const d of data) {
+    if (d.run.status !== "completed") continue;
     for (const m of d.moves.filter((m) => m.ply <= 16 && ownMove(d, m))) {
       const name = openingName(d, m.fen_before.split(" ")[1] as "w" | "b"),
         g = groups.get(name),

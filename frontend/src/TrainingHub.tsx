@@ -22,6 +22,7 @@ import {
   validateTraining,
 } from "./training";
 import "./training.css";
+import { openingGuide } from "./openings";
 type Props = {
   data: ReviewedGame[];
   api: (path: string, body?: unknown) => Promise<any>;
@@ -35,6 +36,7 @@ export function TrainingHub({ data, api, open }: Props) {
     [queue, setQueue] = useState<string[]>([]),
     [index, setIndex] = useState(0),
     [source, setSource] = useState<"daily" | "opening">("daily"),
+    [openingTitle, setOpeningTitle] = useState(""),
     [answer, setAnswer] = useState(""),
     [selected, setSelected] = useState<Square | null>(null),
     [promotion, setPromotion] = useState<{ from: string; to: string } | null>(
@@ -103,7 +105,12 @@ export function TrainingHub({ data, api, open }: Props) {
     setNote("");
     hintRecorded.current = false;
     started.current = Date.now();
-    attemptId.current = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Date.now().toString(36)+'-'+Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
+    attemptId.current =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : Date.now().toString(36) +
+          "-" +
+          Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-");
   }
   async function startDaily() {
     await action(async () => {
@@ -123,9 +130,10 @@ export function TrainingHub({ data, api, open }: Props) {
       reset();
     });
   }
-  function startOpening(c: Card) {
+  function startOpening(c: Card, name: string) {
     if (busy) return;
     setSource("opening");
+    setOpeningTitle(name);
     setQueue([c.id]);
     setIndex(0);
     reset();
@@ -436,6 +444,15 @@ export function TrainingHub({ data, api, open }: Props) {
                       ? " · 引擎變化"
                       : ""}
                 </p>
+                {source === "opening" && (
+                  <p className="opening-practice-title">
+                    {openingTitle}
+                    <br />
+                    <small>
+                      這是原對局的開局分類；目前題目可能位於該開局形成之前。
+                    </small>
+                  </p>
+                )}
                 <Chessboard
                   id="training-board"
                   position={fen}
@@ -737,8 +754,30 @@ export function TrainingHub({ data, api, open }: Props) {
               {tab === "opening" && (
                 <>
                   <p>
-                    以下是你真正下過的開局路徑，以前四半步分組，並非標準開局名稱。只統計已完成分析的對局；相同局面合併，白黑分開練。
+                    依前 8
+                    回合中最後辨識到的標準局面命名，支援不同走法順序轉入同一局面。中文為常見體系名稱，英文保留具體變化；ECO
+                    是開局分類編號，不是難度。只統計已完成分析的對局，白黑分開練。
                   </p>
+                  <aside className="opening-guide">
+                    <h3>怎麼開始學？</h3>
+                    <ol>
+                      <li>
+                        先選出現最多的一個開局，讀懂中央計畫，不必一次背完所有變化。
+                      </li>
+                      <li>
+                        依回合順序練下面的真實局面；先按「回看如何走到這裡」，再自己走下一步。
+                      </li>
+                      <li>
+                        答題後播放最佳變化，寫下「對方威脅什麼、我該先做什麼」，隔天回每日訓練複習。
+                      </li>
+                    </ol>
+                    <p>
+                      開局名稱描述你下過的路徑，不代表推薦照抄整盤；下列計畫是一般學習指引，具體走法仍以棋盤與引擎比較為準。
+                    </p>
+                  </aside>
+                  {!groups.length && (
+                    <p>先分析一盤自己的對局，就能看到開局名稱與練習局面。</p>
+                  )}
                   <div className="opening-groups">
                     {groups.map((g) => (
                       <details key={g.name}>
@@ -750,6 +789,44 @@ export function TrainingHub({ data, api, open }: Props) {
                             個局面
                           </span>
                         </summary>
+                        <div className="opening-guide">
+                          <h4>這個開局在學什麼？</h4>
+                          <p>{openingGuide(g.opening.english).idea}</p>
+                          <p>
+                            <strong>
+                              你執{g.color === "w" ? "白" : "黑"}的重點：
+                            </strong>
+                            {
+                              openingGuide(g.opening.english)[
+                                g.color === "w" ? "white" : "black"
+                              ]
+                            }
+                          </p>
+                          <p>
+                            <strong>這次練習先檢查：</strong>
+                            {openingGuide(g.opening.english).check}
+                          </p>
+                          {g.opening.eco && (
+                            <>
+                              <p>
+                                辨識依據：實戰至第{" "}
+                                {Math.ceil(g.opening.matchedPly / 2)}{" "}
+                                回合的局面符合資料庫；其後走法不保證仍屬理論。
+                              </p>
+                              <p>
+                                <strong>資料庫代表走法：</strong>
+                                {g.opening.line}
+                              </p>
+                              <a
+                                href="https://github.com/lichess-org/chess-openings"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                查看 Lichess 開局資料 ↗
+                              </a>
+                            </>
+                          )}
+                        </div>
                         {g.cards
                           .sort((a, b) => a.ply - b.ply)
                           .map((c) => (
@@ -777,7 +854,7 @@ export function TrainingHub({ data, api, open }: Props) {
                                 disabled={
                                   busy || state!.memories[c.id]?.suspended
                                 }
-                                onClick={() => startOpening(c)}
+                                onClick={() => startOpening(c, g.name)}
                               >
                                 練這個局面
                               </button>

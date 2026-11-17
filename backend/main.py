@@ -193,7 +193,7 @@ def detail(game_id: int):
 
 @app.post("/api/games/{game_id}/analyze")
 def analyze(game_id: int, body: AnalyzeBody):
-    if body.mode not in ["quick", "deep"]:
+    if body.mode not in ["instant", "quick", "deep"]:
         raise HTTPException(422, "未知分析模式")
     try:
         engine_path()
@@ -213,9 +213,10 @@ def analyze(game_id: int, body: AnalyzeBody):
             raise HTTPException(422, "這盤沒有走法（零步和棋），不需要引擎分析。")
         r = Run(
             game_id=game_id,
-            depth=12 if body.mode == "quick" else 18,
+            depth={"instant": 8, "quick": 12, "deep": 18}[body.mode],
+            multipv=1 if body.mode == "instant" else 3,
             total=s.query(Move).filter_by(game_id=game_id).count(),
-            limits={"seconds_per_position": 0.15 if body.mode == "quick" else 1.0},
+            limits={"seconds_per_position": {"instant": 0.05, "quick": 0.15, "deep": 1.0}[body.mode], "evaluation_strategy": "shared-boundary-v1"},
         )
         s.add(r)
         s.commit()

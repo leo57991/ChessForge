@@ -13,7 +13,8 @@ import {
 } from "./types";
 import { browserAPI } from "./offline";
 import "./style.css";
-import {ReviewHome} from "./ReviewHome";
+import { ReviewCoach, moveIcons, badgePosition } from "./ReviewCoach";
+import { ReviewHome } from "./ReviewHome";
 const browserMode = import.meta.env.VITE_BROWSER_MODE === "true";
 async function api(path: string, body?: unknown) {
   if (browserMode) return browserAPI(path, body);
@@ -45,6 +46,8 @@ function App() {
     [mode, setMode] = useState("quick"),
     [research, setResearch] = useState<string | null>(null),
     [pvIndex, setPvIndex] = useState<number | null>(null),
+    [lineKind, setLineKind] = useState<"best" | "actual">("best"),
+    [selectedSquare, setSelectedSquare] = useState<Square | null>(null),
     [playing, setPlaying] = useState(false),
     [search, setSearch] = useState(""),
     [health, setHealth] = useState(false),
@@ -63,8 +66,9 @@ function App() {
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
   }, []);
-  async function select(id: number, position=0, selectedRun?:number) {
+  async function select(id: number, position = 0, selectedRun?: number) {
     const seq = ++sequence.current;
+    setSelectedSquare(null);
     setDetail(null);
     setRun(null);
     setAnalyses([]);
@@ -83,7 +87,8 @@ function App() {
         ? "black"
         : "white",
     );
-    if (selectedRun || d.runs.length) await loadRun(selectedRun || d.runs[0].id, seq);
+    if (selectedRun || d.runs.length)
+      await loadRun(selectedRun || d.runs[0].id, seq);
   }
   async function loadRun(id: number, seq = sequence.current) {
     const d = await api("/runs/" + id);
@@ -107,7 +112,13 @@ function App() {
       : detail.moves[ply - 1].fen_after
     : new Chess().fen();
   const pv =
-    a && move ? pvPositions(move.fen_before, a.principal_variation, Chess) : [];
+    a && move
+      ? pvPositions(
+          lineKind === "best" ? move.fen_before : move.fen_after,
+          lineKind === "best" ? a.principal_variation : a.actual_variation,
+          Chess,
+        )
+      : [];
   const fen =
     research || (pvIndex !== null ? pv[pvIndex] : original) || original;
   useEffect(() => {
@@ -131,6 +142,7 @@ function App() {
     setPvIndex(null);
     setPlaying(false);
     setPromotion(null);
+    setSelectedSquare(null);
   }
   async function act(fn: () => Promise<void>) {
     setError("");
@@ -185,19 +197,36 @@ function App() {
     })
     .sort((a, b) => b.win_chance_loss - a.win_chance_loss);
   const arrows: [Square, Square, string][] = [];
-  if (move && (!research || research === move.fen_before) && pvIndex === null) {
+  if (a && pvIndex === 0 && lineKind === "best" && !research)
     arrows.push([
-      move.uci.slice(0, 2) as Square,
-      move.uci.slice(2, 4) as Square,
-      "#e2a663",
+      a.best_move_uci.slice(0, 2) as Square,
+      a.best_move_uci.slice(2, 4) as Square,
+      "#51c5aa",
     ]);
-    if (a)
-      arrows.push([
-        a.best_move_uci.slice(0, 2) as Square,
-        a.best_move_uci.slice(2, 4) as Square,
-        "#51c5aa",
-      ]);
+  const nextKey = detail?.moves.find(
+    (m) =>
+      m.ply > ply &&
+      analyses.some((x) => x.move_id === m.id && x.win_chance_loss >= 3),
+  );
+  function showLine(kind: "best" | "actual") {
+    setLineKind(kind);
+    setResearch(null);
+    setPvIndex(0);
+    setPlaying(false);
+    setSelectedSquare(null);
   }
+  function clickSquare(square: Square) {
+    if (selectedSquare && drop(selectedSquare, square)) {
+      setSelectedSquare(null);
+      return;
+    }
+    setSelectedSquare(
+      new Chess(fen).get(square)?.color === new Chess(fen).turn()
+        ? square
+        : null,
+    );
+  }
+
   return (
     <div className="app">
       <header>
@@ -258,7 +287,15 @@ function App() {
             {notice}
           </div>
         )}
-        <ReviewHome games={games} hidden={!!detail} api={api} refresh={refresh} open={(id,ply,runId)=>{void act(()=>select(id,ply,runId))}}/>
+        <ReviewHome
+          games={games}
+          hidden={!!detail}
+          api={api}
+          refresh={refresh}
+          open={(id, ply, runId) => {
+            void act(() => select(id, ply, runId));
+          }}
+        />
         {!detail ? (
           <>
             <section
@@ -337,8 +374,9 @@ function App() {
                 .sort(
                   (a, b) =>
                     Number(isRapid(b.time_control)) -
-                    Number(isRapid(a.time_control)) ||
-                    b.played_at.localeCompare(a.played_at) || b.id - a.id,
+                      Number(isRapid(a.time_control)) ||
+                    b.played_at.localeCompare(a.played_at) ||
+                    b.id - a.id,
                 )
                 .map((g) => (
                   <button
@@ -395,6 +433,7 @@ function App() {
                   value={mode}
                   onChange={(e) => setMode(e.target.value)}
                 >
+                  <option value="instant">速覽 · 深度上限 8 · 單一候選</option>
                   <option value="quick">快速 · 深度上限 12</option>
                   <option value="deep">深入 · 深度上限 18</option>
                 </select>
@@ -430,7 +469,9 @@ function App() {
                     {research
                       ? "自由研究"
                       : pvIndex !== null
-                        ? "引擎最佳變化"
+                        ? lineKind === "best"
+                          ? "引擎最佳變化"
+                          : "實際走法後的應手"
                         : "原始棋局"}
                   </small>
                 </div>
@@ -440,11 +481,31 @@ function App() {
                     position={fen}
                     boardOrientation={orientation}
                     customArrows={arrows}
-                    onPieceDrop={(f, t) => drop(f, t)}
+                    onPieceDrop={(f, t) => {
+                      setSelectedSquare(null);
+                      return drop(f, t);
+                    }}
+                    onSquareClick={clickSquare}
+                    customSquareStyles={
+                      selectedSquare
+                        ? { [selectedSquare]: { backgroundColor: "#d6b75a" } }
+                        : {}
+                    }
+                    areArrowsAllowed={false}
                     customDarkSquareStyle={{ backgroundColor: "#638379" }}
                     customLightSquareStyle={{ backgroundColor: "#e6eadb" }}
                     animationDuration={150}
                   />
+                  {a && move && !research && pvIndex === null && (
+                    <span
+                      className={"board-verdict " + a.classification}
+                      style={badgePosition(move.uci, orientation)}
+                      role="img"
+                      aria-label={`${move.san}：${labels[a.classification]}`}
+                    >
+                      {moveIcons[a.classification]}
+                    </span>
+                  )}
                 </div>
                 <div className="player">
                   <span>
@@ -483,8 +544,9 @@ function App() {
                   </button>
                 </div>
                 <p className="legend">
-                  <span>橘色：實際走法</span>
-                  <span>綠色：引擎建議（失誤前局面）</span>
+                  <span>
+                    表情標記這一步的評價；按 Best Move 才顯示建議箭頭。
+                  </span>
                 </p>
                 {(research || pvIndex !== null) && (
                   <button
@@ -606,108 +668,39 @@ function App() {
                       <progress value={run.progress} max={run.total} />
                       {run.error && <p className="alert">{run.error}</p>}
                       <small>
-                        {run.engine_version || "等待引擎"} · MultiPV 3 ·
-                        每局面時間上限 {run.limits.seconds_per_position}s
+                        {run.engine_version || "等待引擎"} · MultiPV{" "}
+                        {run.multipv} · 每局面時間上限{" "}
+                        {run.limits.seconds_per_position}s
                       </small>
                     </div>
                   )}
                   {a && move ? (
-                    <>
-                      <span className={"badge " + a.classification}>
-                        {labels[a.classification]}
-                      </span>
-                      <div className="comparison">
-                        <div>
-                          <small>你的走法</small>
-                          <strong>
-                            {Math.ceil(move.ply / 2)}
-                            {move.ply % 2 ? "." : "…"} {move.san}
-                          </strong>
-                        </div>
-                        <span>→</span>
-                        <div>
-                          <small>引擎建議</small>
-                          <strong className="mint">{a.best_move_san}</strong>
-                        </div>
-                      </div>
-                      <div className="metrics">
-                        <span>
-                          白方評估{" "}
-                          <b>
-                            {scoreText(a.evaluation_before)} →{" "}
-                            {scoreText(a.evaluation_after)}
-                          </b>
-                        </span>
-                        <span>
-                          走棋方損失{" "}
-                          <b>
-                            {a.score_loss === null
-                              ? "涉及將死"
-                              : `${(a.score_loss / 100).toFixed(2)} 兵`}
-                          </b>
-                        </span>
-                        <span>
-                          實際搜尋深度{" "}
-                          <b>
-                            {a.evaluation_before.depth} /{" "}
-                            {a.evaluation_after.depth}
-                          </b>
-                        </span>
-                      </div>
-                      <h3>為什麼這一步需要留意？</h3>
-                      <p>{a.explanation}</p>
-                      <h3>為什麼推薦 {a.best_move_san}？</h3>
-                      <p>{a.recommendation}</p>
-                      <button
-                        onClick={() => {
-                          setResearch(move.fen_before);
-                          setPvIndex(null);
-                          setPlaying(false);
-                        }}
-                      >
-                        ↶ 回到失誤前，重新想一想
-                      </button>
-                      <div className="pv">
-                        <h3>
-                          最佳變化 <small>雙方合理應手，不是保證走法</small>
-                        </h3>
-                        <div className="pv-moves">
-                          {a.principal_variation.map((m, i) => (
-                            <button
-                              className={pvIndex === i + 1 ? "selected" : ""}
-                              key={i}
-                              onClick={() => {
-                                setResearch(null);
-                                setPvIndex(i + 1);
-                                setPlaying(false);
-                              }}
-                            >
-                              {m.san}
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          className="primary"
-                          onClick={() => {
-                            setResearch(null);
-                            setPvIndex(0);
-                            setPlaying(true);
-                          }}
-                        >
-                          ▶ 播放最佳變化
-                        </button>
-                        <button onClick={() => setPlaying(false)}>暫停</button>
-                      </div>
-                      <details>
-                        <summary>比較前三個候選走法</summary>
-                        {a.candidates.map((c, i) => (
-                          <p key={i}>
-                            {i + 1}. {c.pv.map((m) => m.san).join(" ")} ·{" "}
-                            {scoreText(c.score)}
-                          </p>
-                        ))}
-                      </details>
-                    </>
+                    <ReviewCoach
+                      key={`${run?.id}-${move.id}`}
+                      a={a}
+                      move={move}
+                      onBest={() => showLine("best")}
+                      onActual={() => showLine("actual")}
+                      onRetry={() => {
+                        setResearch(move.fen_before);
+                        setPvIndex(null);
+                        setPlaying(false);
+                        setSelectedSquare(null);
+                      }}
+                      onNext={() => nextKey && jump(nextKey.ply)}
+                      hasNext={!!nextKey}
+                      lineKind={lineKind}
+                      lineIndex={pvIndex}
+                      playing={playing}
+                      onStep={(n) => {
+                        setPvIndex(n);
+                        setPlaying(false);
+                        setSelectedSquare(null);
+                      }}
+                      onPlay={() => setPlaying(true)}
+                      onPause={() => setPlaying(false)}
+                      onReturn={() => jump(ply)}
+                    />
                   ) : (
                     <div className="coach-empty">
                       <span>♘</span>
@@ -722,7 +715,8 @@ function App() {
                     </div>
                   )}
                 </section>
-                <section className="card moves">
+                <details className="card moves">
+                  <summary>完整棋譜 · 點選走法跳轉</summary>
                   <div className="section-title">
                     <h3>完整棋譜</h3>
                     <small>點選走法即可跳轉</small>
@@ -742,22 +736,13 @@ function App() {
                           </small>{" "}
                           {m.san}
                           <span>
-                            {x
-                              ? (
-                                  {
-                                    Blunder: "??",
-                                    Mistake: "?",
-                                    Inaccuracy: "?!",
-                                    Best: "★",
-                                  } as Record<string, string>
-                                )[x.classification] || ""
-                              : ""}
+                            {x ? moveIcons[x.classification] || "" : ""}
                           </span>
                         </button>
                       );
                     })}
                   </div>
-                </section>
+                </details>
                 {analyses.length > 0 && (
                   <section className="card summary">
                     <h3>
@@ -794,9 +779,7 @@ function App() {
         )}
         <footer>
           CHESSFORGE{" "}
-          <span>
-            獨立開源工具，與 Chess.com 無隸屬關係 · 只分析已結束棋局
-          </span>
+          <span>獨立開源工具，與 Chess.com 無隸屬關係 · 只分析已結束棋局</span>
         </footer>
       </main>
     </div>

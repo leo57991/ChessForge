@@ -197,3 +197,28 @@ def test_training_move_check_is_completed_game_scoped():
     assert result.status_code == 200
     assert result.json()['after']['mate'] == 0
     assert result.json()['after']['white_wins'] is False
+
+
+def test_shared_boundary_search_and_fast_mode(monkeypatch):
+    import analysis as analysis_module
+    import_pgn(MATE)
+    calls = []
+    original_evaluate = analysis_module.evaluate
+    def tracked(*args):
+        calls.append((len(args[1].move_stack), args[-1]))
+        return original_evaluate(*args)
+    monkeypatch.setattr(analysis_module, "evaluate", tracked)
+    with Session() as s:
+        g = s.query(Game).first()
+        r = Run(game_id=g.id, depth=8, multipv=1, total=4, limits={"seconds_per_position": 0.05})
+        s.add(r)
+        s.commit()
+        rid = r.id
+    work(rid)
+    assert calls == [(i, 1) for i in range(5)]  # N + 1, not 2N searches
+    with Session() as s:
+        assert s.get(Run, rid).status == "completed"
+        rows = s.query(Analysis).filter_by(analysis_run_id=rid).order_by(Analysis.move_id).all()
+        assert len(rows) == 4
+        assert all(rows[i].evaluation_after == rows[i+1].evaluation_before for i in range(3))
+        assert rows[-1].evaluation_after["mate"] == 0

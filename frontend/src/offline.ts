@@ -1,6 +1,6 @@
 import { Chess } from "chess.js";
 import { Analysis, Detail, Game, Move, PV, Run, Score } from "./types";
-import {emptyTraining, validateTraining, Envelope} from "./training";
+import { emptyTraining, validateTraining, Envelope } from "./training";
 type Saved = {
   details: Detail[];
   analyses: Record<number, Analysis[]>;
@@ -67,9 +67,7 @@ function forcedEnd(c: Chess) {
     count >= 5
   );
 }
-export function parsePGN(
-  text: string,
-): {
+export function parsePGN(text: string): {
   game: Omit<Game, "id">;
   moves: Omit<Move, "id" | "game_id">[];
   initial_fen: string;
@@ -311,16 +309,19 @@ async function analyze(d: Detail, r: Run) {
     await save();
     const board = new Chess(d.initial_fen),
       history: string[] = [];
+    let previousAfter: Awaited<ReturnType<UCI["evaluate"]>> | undefined;
     for (const move of d.moves) {
       if (r.status === "cancelled") return;
-      const before = await eng.evaluate(
-          board,
-          d.initial_fen,
-          history,
-          r.depth,
-          r.limits.seconds_per_position * 1000,
-          3,
-        ),
+      const before =
+          previousAfter ||
+          (await eng.evaluate(
+            board,
+            d.initial_fen,
+            history,
+            r.depth,
+            r.limits.seconds_per_position * 1000,
+            r.multipv,
+          )),
         best = before[0].pv[0],
         white = board.turn() === "w";
       let recommendation =
@@ -340,7 +341,7 @@ async function analyze(d: Detail, r: Run) {
           history,
           r.depth,
           r.limits.seconds_per_position * 1000,
-          1,
+          r.multipv,
         ),
         cl = classify(
           before[0].score,
@@ -348,6 +349,7 @@ async function analyze(d: Detail, r: Run) {
           white,
           best.uci === move.uci,
         );
+      previousAfter = after;
       let explanation = `走棋方的估計勝算損失 ${cl.loss.toFixed(1)} 個百分點。這是引擎評估的換算值，並非你的實際勝率。具體原因需進一步檢查。`;
       if (board.isStalemate() && winChance(before[0].score, white) > 0.8)
         explanation =
@@ -395,29 +397,77 @@ async function analyze(d: Detail, r: Run) {
 export async function browserAPI(path: string, body?: any): Promise<any> {
   await ready;
   if (path === "/training") {
-    if(body) validateTraining(body.state);
-    return new Promise<Envelope>((resolve,reject)=>{
-      const tx=database.transaction('state',body?'readwrite':'readonly'),store=tx.objectStore('state');
-      const req=store.get('training');let result:Envelope;
-      req.onsuccess=()=>{const current:Envelope=req.result||{revision:0,state:emptyTraining()};
-        if(body&&body.revision!==current.revision){reject(new Error('另一個分頁已更新訓練進度，請重新載入後再試。'));tx.abort();return}
-        result=body?{revision:current.revision+1,state:validateTraining(body.state)}:current;
-        if(body)store.put(result,'training');
+    if (body) validateTraining(body.state);
+    return new Promise<Envelope>((resolve, reject) => {
+      const tx = database.transaction("state", body ? "readwrite" : "readonly"),
+        store = tx.objectStore("state");
+      const req = store.get("training");
+      let result: Envelope;
+      req.onsuccess = () => {
+        const current: Envelope = req.result || {
+          revision: 0,
+          state: emptyTraining(),
+        };
+        if (body && body.revision !== current.revision) {
+          reject(new Error("另一個分頁已更新訓練進度，請重新載入後再試。"));
+          tx.abort();
+          return;
+        }
+        result = body
+          ? {
+              revision: current.revision + 1,
+              state: validateTraining(body.state),
+            }
+          : current;
+        if (body) store.put(result, "training");
       };
-      tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(new Error('訓練儲存失敗，請確認瀏覽器空間。'));tx.onabort=()=>reject(new Error('訓練資料未儲存，請重新載入。'));
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(new Error("訓練儲存失敗，請確認瀏覽器空間。"));
+      tx.onabort = () => reject(new Error("訓練資料未儲存，請重新載入。"));
     });
   }
-  if (path === '/training/check') {
-    const d=state.details.find(x=>x.game.id===body.game_id);
-    if(!d||!['1-0','0-1','1/2-1/2'].includes(d.game.result)||!Number.isInteger(body.ply)||body.ply<1||body.ply>d.moves.length)throw new Error('找不到已完成對局的棋步');
-    const b=new Chess(d.initial_fen),history:string[]=[];
-    for(const m of d.moves.slice(0,body.ply-1)){b.move(m.san);history.push(m.uci)}
-    const probe=new Chess(b.fen());probe.move({from:body.uci.slice(0,2),to:body.uci.slice(2,4),promotion:body.uci[4]});
-    const eng=new UCI();try{await eng.init();const before=await eng.evaluate(b,d.initial_fen,history,16,500,3);
-      b.move({from:body.uci.slice(0,2),to:body.uci.slice(2,4),promotion:body.uci[4]});history.push(body.uci);
-      const after=await eng.evaluate(b,d.initial_fen,history,16,500,1);
-      return {before:before[0].score,after:after[0].score,pv:after[0].pv,engine:'Stockfish 17.1 Lite'};
-    }finally{eng.close()}
+  if (path === "/training/check") {
+    const d = state.details.find((x) => x.game.id === body.game_id);
+    if (
+      !d ||
+      !["1-0", "0-1", "1/2-1/2"].includes(d.game.result) ||
+      !Number.isInteger(body.ply) ||
+      body.ply < 1 ||
+      body.ply > d.moves.length
+    )
+      throw new Error("找不到已完成對局的棋步");
+    const b = new Chess(d.initial_fen),
+      history: string[] = [];
+    for (const m of d.moves.slice(0, body.ply - 1)) {
+      b.move(m.san);
+      history.push(m.uci);
+    }
+    const probe = new Chess(b.fen());
+    probe.move({
+      from: body.uci.slice(0, 2),
+      to: body.uci.slice(2, 4),
+      promotion: body.uci[4],
+    });
+    const eng = new UCI();
+    try {
+      await eng.init();
+      const before = await eng.evaluate(b, d.initial_fen, history, 16, 500, 3);
+      b.move({
+        from: body.uci.slice(0, 2),
+        to: body.uci.slice(2, 4),
+        promotion: body.uci[4],
+      });
+      history.push(body.uci);
+      const after = await eng.evaluate(b, d.initial_fen, history, 16, 500, 1);
+      return {
+        before: before[0].score,
+        after: after[0].score,
+        pv: after[0].pv,
+        engine: "Stockfish 17.1 Lite",
+      };
+    } finally {
+      eng.close();
+    }
   }
   if (path === "/health")
     return { engine_ready: typeof WebAssembly !== "undefined" };
@@ -447,32 +497,51 @@ export async function browserAPI(path: string, body?: any): Promise<any> {
     await save();
     return { imported, duplicates };
   }
-  if(path==='/sync') {
-    const {fetchPublicPGN}=await import('./sync');
-    const pgn=await fetchPublicPGN(body.source,body.username);
-    return pgn.trim()?browserAPI('/import',{pgn,source:body.source}):{imported:0,duplicates:0};
+  if (path === "/sync") {
+    const { fetchPublicPGN } = await import("./sync");
+    const pgn = await fetchPublicPGN(body.source, body.username);
+    return pgn.trim()
+      ? browserAPI("/import", { pgn, source: body.source })
+      : { imported: 0, duplicates: 0 };
   }
-  if(path==='/review-data')return structuredClone(state.details.flatMap(d=>{
-    const run=d.runs.find(r=>r.status==='completed');
-    return run?[{game:d.game,moves:d.moves,run,analyses:state.analyses[run.id]||[]}]:[];
-  }));
+  if (path === "/review-data")
+    return structuredClone(
+      state.details.flatMap((d) => {
+        const run = d.runs.find((r) => r.status === "completed");
+        return run
+          ? [
+              {
+                game: d.game,
+                moves: d.moves,
+                run,
+                analyses: state.analyses[run.id] || [],
+              },
+            ]
+          : [];
+      }),
+    );
   const gm = path.match(/^\/games\/(\d+)(\/analyze)?$/);
   if (gm) {
     const d = state.details.find((d) => d.game.id === Number(gm[1]));
     if (!d) throw new Error("找不到棋局");
     if (!gm[2]) return structuredClone(d);
     if (!d.moves.length) throw new Error("零步和棋沒有需要分析的走法。");
+    if (!["instant", "quick", "deep"].includes(body?.mode))
+      throw new Error("未知分析模式");
     if (active) throw new Error("請先完成或取消目前的分析。");
     const r: Run = {
       id: state.next++,
       game_id: d.game.id,
       engine_version: "Stockfish 17.1 Lite · WASM",
-      depth: body.mode === "deep" ? 18 : 12,
-      multipv: 3,
+      depth: body.mode === "deep" ? 18 : body.mode === "instant" ? 8 : 12,
+      multipv: body.mode === "instant" ? 1 : 3,
       status: "queued",
       progress: 0,
       total: d.moves.length,
-      limits: { seconds_per_position: body.mode === "deep" ? 1 : 0.15 },
+      limits: {
+        seconds_per_position:
+          body.mode === "deep" ? 1 : body.mode === "instant" ? 0.05 : 0.15,
+      },
     };
     d.runs.unshift(r);
     state.analyses[r.id] = [];

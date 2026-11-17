@@ -212,4 +212,28 @@ caption {
   }
 }
 
-.weakness-home:has(.training-session) .review-evidence { display: none; }
+.weakness-home:has(.training-session) .review-evidence {
+  display: none;
+}
+
+.opening-guide {
+  padding: 1rem;
+  margin: 0.75rem 0;
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.opening-guide h3,
+.opening-guide h4 {
+  margin: 0 0 0.5rem;
+}
+.opening-guide ol {
+  padding-left: 1.3rem;
+}
+.opening-guide a {
+  color: #b6d5a9;
+}
+.opening-groups summary strong {
+  overflow-wrap: anywhere;
+}

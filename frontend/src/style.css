@@ -683,4 +683,351 @@ footer span {
   font: 12px monospace;
   resize: vertical;
 }
-.weakness-home{margin-bottom:32px}.sync-strip{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px;background:#223126;border:1px solid #435b40;border-radius:12px}.sync-strip small{display:block;margin:8px 0}.sync-strip label{display:flex;align-items:center;gap:7px;font-size:11px;color:#acbda8}.sync-strip input{accent-color:#bbdfa1}.sync-actions{display:flex;gap:8px;flex-wrap:wrap}.sync-note{font-size:10px;color:#91a18e}.weakness-home>.section-title{margin-top:28px}.weakness-home>.section-title h2{margin-bottom:0}.weakness-home>p{font-size:12px}.weakness-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.weakness-card{padding:18px;text-align:left;background:#1d2922;border:1px solid #3b4c3e}.weakness-card.active{border-color:#bddc9e;background:#30452e}.weakness-card>span{display:block;font-size:14px}.weakness-card>strong{display:block;font-size:30px;color:#c2dda9;margin:10px 0}.weakness-card p{font-size:11px;margin-bottom:0}.weakness-card small{font-size:10px;font-weight:400}.position-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.position-card{text-align:left;padding:18px;background:#202c25}.position-card>div{display:flex;justify-content:space-between;align-items:center}.position-card>strong{display:block;margin:10px 0;font-size:22px;color:#d4e5bd}.position-card>small{display:block}.position-card p{font-size:12px}.position-card footer{margin-top:15px;padding:12px 0 0;font-size:10px;letter-spacing:0}.position-card footer b{color:#b7dca1}.weakness-home .notice small{display:block;margin-top:6px}@media(max-width:700px){.sync-strip{display:block;padding:15px}.sync-actions{margin-top:12px}.sync-actions button{font-size:11px;flex:1}.weakness-grid{grid-template-columns:repeat(2,1fr);gap:8px}.weakness-card{padding:12px}.weakness-card>span{font-size:12px}.weakness-card p{font-size:10px}.weakness-home>.section-title{align-items:flex-start;flex-direction:column}.weakness-home>.section-title .primary{width:100%;font-size:12px}.position-grid{grid-template-columns:1fr}.sync-strip label{font-size:10px}}
+.weakness-home {
+  margin-bottom: 32px;
+}
+.sync-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  background: #223126;
+  border: 1px solid #435b40;
+  border-radius: 12px;
+}
+.sync-strip small {
+  display: block;
+  margin: 8px 0;
+}
+.sync-strip label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #acbda8;
+}
+.sync-strip input {
+  accent-color: #bbdfa1;
+}
+.sync-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sync-note {
+  font-size: 10px;
+  color: #91a18e;
+}
+.weakness-home > .section-title {
+  margin-top: 28px;
+}
+.weakness-home > .section-title h2 {
+  margin-bottom: 0;
+}
+.weakness-home > p {
+  font-size: 12px;
+}
+.weakness-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.weakness-card {
+  padding: 18px;
+  text-align: left;
+  background: #1d2922;
+  border: 1px solid #3b4c3e;
+}
+.weakness-card.active {
+  border-color: #bddc9e;
+  background: #30452e;
+}
+.weakness-card > span {
+  display: block;
+  font-size: 14px;
+}
+.weakness-card > strong {
+  display: block;
+  font-size: 30px;
+  color: #c2dda9;
+  margin: 10px 0;
+}
+.weakness-card p {
+  font-size: 11px;
+  margin-bottom: 0;
+}
+.weakness-card small {
+  font-size: 10px;
+  font-weight: 400;
+}
+.position-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.position-card {
+  text-align: left;
+  padding: 18px;
+  background: #202c25;
+}
+.position-card > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.position-card > strong {
+  display: block;
+  margin: 10px 0;
+  font-size: 22px;
+  color: #d4e5bd;
+}
+.position-card > small {
+  display: block;
+}
+.position-card p {
+  font-size: 12px;
+}
+.position-card footer {
+  margin-top: 15px;
+  padding: 12px 0 0;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+.position-card footer b {
+  color: #b7dca1;
+}
+.weakness-home .notice small {
+  display: block;
+  margin-top: 6px;
+}
+@media (max-width: 700px) {
+  .sync-strip {
+    display: block;
+    padding: 15px;
+  }
+  .sync-actions {
+    margin-top: 12px;
+  }
+  .sync-actions button {
+    font-size: 11px;
+    flex: 1;
+  }
+  .weakness-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .weakness-card {
+    padding: 12px;
+  }
+  .weakness-card > span {
+    font-size: 12px;
+  }
+  .weakness-card p {
+    font-size: 10px;
+  }
+  .weakness-home > .section-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .weakness-home > .section-title .primary {
+    width: 100%;
+    font-size: 12px;
+  }
+  .position-grid {
+    grid-template-columns: 1fr;
+  }
+  .sync-strip label {
+    font-size: 10px;
+  }
+}
+
+.board {
+  position: relative;
+}
+.board-verdict {
+  position: absolute;
+  z-index: 3;
+  transform: translateX(-50%);
+  font-size: clamp(17px, 2.7vw, 28px);
+  line-height: 1.15;
+  padding: 2px;
+  border-radius: 50%;
+  background: #182820;
+  box-shadow: 0 2px 5px #0008;
+  pointer-events: none;
+}
+.move-verdict {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 0 6px;
+}
+.move-verdict > span {
+  font-size: 40px;
+}
+.move-verdict strong {
+  font-size: 28px;
+}
+.move-verdict p {
+  margin: 4px 0;
+}
+.coach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.coach-actions button {
+  flex: 1;
+  min-width: 150px;
+}
+.review-one-line,
+.coach-explanation p,
+.best-explanation p {
+  font-size: 15px;
+  line-height: 1.8;
+}
+.coach-explanation,
+.best-explanation,
+.compact-variation {
+  padding: 16px;
+  border-radius: 12px;
+  background: #24342b;
+  margin: 14px 0;
+}
+.compact-variation > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.engine-details {
+  margin-top: 20px;
+  font-size: 12px;
+  color: #b4c4b9;
+}
+.engine-details p {
+  overflow-wrap: anywhere;
+}
+.moves > summary {
+  cursor: pointer;
+  font-weight: bold;
+  padding: 5px 0;
+}
+.personal-report {
+  margin: 24px 0;
+}
+.personal-report > summary {
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1.6;
+}
+.personal-report > summary span {
+  font-size: 12px;
+  color: #b3c7b6;
+}
+.personal-report section > p {
+  line-height: 1.8;
+  font-size: 13px;
+}
+.report-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: end;
+  margin: 18px 0;
+}
+.report-filters label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.report-filters select {
+  max-width: 100%;
+  padding: 10px;
+  background: #203127;
+  color: #e0ecd9;
+  border-radius: 8px;
+  border: 1px solid #63765f;
+}
+.report-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.report-metrics article {
+  padding: 16px;
+  background: #223229;
+  border-radius: 12px;
+}
+.report-metrics h3 {
+  margin: 0 0 12px;
+}
+.report-metrics article > strong {
+  font-size: 26px;
+  color: #d4e7ba;
+}
+.report-metrics p {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.report-metrics summary {
+  font-size: 12px;
+  cursor: pointer;
+}
+.report-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.report-links button {
+  text-align: left;
+}
+.report-table {
+  overflow-x: auto;
+}
+.report-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.report-table th,
+.report-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #405344;
+}
+.report-table button {
+  font-size: 12px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .report-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .report-metrics article {
+    padding: 12px;
+  }
+  .report-filters label {
+    width: 100%;
+  }
+  .personal-report > summary span {
+    display: block;
+  }
+  .coach-actions button {
+    min-width: 120px;
+    font-size: 12px;
+  }
+  .report-table {
+    font-size: 11px;
+  }
+  .board-verdict {
+    font-size: 20px;
+  }
+}
+@media (max-width: 380px) {
+  .report-metrics {
+    grid-template-columns: 1fr;
+  }
+}
