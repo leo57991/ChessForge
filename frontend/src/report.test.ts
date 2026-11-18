@@ -136,3 +136,28 @@ describe("personal report evidence", () => {
     expect(reportMarkdown(r)).toContain("game 1, ply 1, run 1");
   });
 });
+
+import { openingAt15, overviewAxes } from "./reportMetrics";
+it("opening checkpoint excludes short games and mates from cp averages, flips black POV", () => {
+  const w = sample(1, false, 100),
+    b = sample(2, true, -200),
+    mate = sample(3);
+  for (const d of [w, b, mate]) d.moves[d.moves.length - 1].ply = 30;
+  mate.analyses[mate.analyses.length - 1].evaluation_after = {
+    cp: null,
+    mate: 2,
+    white_wins: true,
+    depth: 12,
+  };
+  const x = openingAt15([w, b, mate, sample(4)]);
+  expect(x.groups[0]).toMatchObject({ n: 3, mates: 1, mean: 1.5 });
+  expect(x.groups[2]).toMatchObject({ n: 1, mean: 2 });
+  expect(openingAt15([]).groups[0].mean).toBeNull();
+});
+it("overview uses documented rates and does not draw missing evidence as zero", () => {
+  const d = sample(),
+    r = makeReport([d], reportScope(d), 40),
+    a = overviewAxes(r);
+  expect(a.find((x) => x.id === "mistakes")?.score).toBe(90);
+  expect(a.find((x) => x.id === "conversion")?.score).toBeNull();
+});

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { PersonalReport } from "./PersonalReport";
-import { TrainingHub } from "./TrainingHub";
 import { Game, labels } from "./types";
 import { accounts, Platform } from "./sync";
 import {
@@ -75,7 +74,8 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
     )
       void sync("chesscom");
   }, []);
-  async function batchAnalyze() {
+  async function batchAnalyze(reportGroup?: string, count = 5) {
+    if (batch) return;
     cancel.current = false;
     setError("");
     let done = 0,
@@ -84,7 +84,8 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
     const queue = games
       .filter(
         (g) =>
-          !completed.has(g.id) &&
+          ((!reportGroup && !completed.has(g.id)) ||
+            JSON.stringify([g.source, g.time_control]) === reportGroup) &&
           [g.white_username, g.black_username].some((n) =>
             ["hugemudraven", "oo09080983"].includes(n.toLowerCase()),
           ),
@@ -100,7 +101,8 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
           b.id - a.id
         );
       })
-      .slice(0, 5);
+      .slice(0, count)
+      .filter((g) => !completed.has(g.id));
     if (!queue.length) {
       setMessage("目前對局已分析完成，請先同步或匯入更多棋局。");
       return;
@@ -207,9 +209,18 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
           {message}
         </div>
       )}
-      <TrainingHub data={data} api={api} open={open} />
       <div className="review-evidence">
-        <PersonalReport data={data} open={open} />
+        <PersonalReport
+          data={data}
+          games={games}
+          open={open}
+          generate={(s, n) => void batchAnalyze(s, n)}
+          busy={!!batch || !!syncing}
+          progress={batch}
+          stop={() => void stop()}
+        />
+      </div>
+      <div className="review-evidence">
         <div className="section-title">
           <div>
             <div className="eyebrow">FOCUS ON YOUR NEXT IMPROVEMENT</div>
@@ -218,7 +229,7 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
           <button
             className="primary"
             disabled={!!batch || !!syncing || !games.length}
-            onClick={batchAnalyze}
+            onClick={() => batchAnalyze()}
           >
             ✦ 分析最近 5 盤，幫我挑局面
           </button>

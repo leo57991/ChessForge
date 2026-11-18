@@ -28,3 +28,10 @@ Chess.com 官方 [Game Review 教學](https://support.chess.com/en/articles/1032
 ## 資料與擴充
 
 本次不需要資料庫遷移：報告讀取既有 games/moves/analysis_runs/move_analyses，保留訓練紀錄。開局名稱來自 CC0 Lichess 開局資料的 3,865 筆定義，按合法局面比對，保留 ECO／英文細分與中文家族學習指南；自訂起始局面或未辨識時明示。開局名稱不等於該步是引擎最佳走法。
+
+
+## 2026-11-18：聚焦報告與復盤
+
+依使用者提供的 Aimchess 截圖，採用「總覽→開局白黑比較→具名開局→實戰問題→改善入口」的資訊順序。獨立定義五項實戰比例，不複製其未公開評分公式或虛構同儕基準。第 15 回合採第 30 半步，所有分數換為使用者視角；將死另計，短局不補值。報告固定在所選來源／時制最新 N 盤內，只採完整分析。
+
+依最新產品方向移除內建訓練區，保留舊資料；新流程由 ChessForge 報告與復盤導向免費 Lichess 主題。來源：[主題目錄](https://lichess.org/training/themes)、[開局題目](https://lichess.org/training/openings)、[基礎練習](https://lichess.org/practice)。階段分類不冒稱已證實某種戰術弱點；開局題庫不冒稱完整開局課程。未同步外部練習進度。

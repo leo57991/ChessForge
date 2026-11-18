@@ -1031,3 +1031,4 @@ footer span {
     grid-template-columns: 1fr;
   }
 }
+.report-overview{display:grid;grid-template-columns:minmax(230px,1fr) minmax(260px,1fr);gap:28px;align-items:center}.report-overview svg{width:100%;max-width:480px;margin:auto}.opening-bars{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.opening-bars article,.opening-report-row{padding:18px;border:1px solid #42544b;border-radius:14px;margin-bottom:14px}.opening-bars strong{font-size:26px}.signed-track{position:relative;background:#304039;height:20px;margin-top:16px}.signed-track:after{content:'';position:absolute;left:50%;height:100%;border-left:1px solid white}.signed-track i{position:absolute;height:100%;display:block}.personal-report h2{margin-top:30px}.personal-report>summary{font-size:24px}@media(max-width:700px){.report-overview,.opening-bars{grid-template-columns:1fr}}

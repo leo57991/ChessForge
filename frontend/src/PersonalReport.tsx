@@ -1,25 +1,73 @@
+import { lichessResources } from "./lichessResources";
+import { extendedReportMarkdown } from "./reportMetrics";
+import { ReportOverview } from "./ReportOverview";
+import { Game } from "./types";
 import { useState } from "react";
 import { ReviewedGame } from "./weaknesses";
 import { makeReport, reportGames, reportScope, reportMarkdown } from "./report";
 type Props = {
   data: ReviewedGame[];
+  games: Game[];
+  generate: (scope: string, limit: number) => void;
+  busy: boolean;
+  progress: string;
+  stop: () => void;
   open: (id: number, ply: number, run: number) => void;
 };
-export function PersonalReport({ data, open }: Props) {
+export function PersonalReport({
+  data,
+  open,
+  games,
+  generate,
+  busy,
+  progress,
+  stop,
+}: Props) {
   const [scope, setScope] = useState(""),
     [limit, setLimit] = useState(40),
     [color, setColor] = useState<"all" | "w" | "b">("all");
   const valid = reportGames(data),
-    scopes = [...new Set(valid.map(reportScope))].sort(
+    scopes = [
+      ...new Set([
+        ...valid.map(reportScope),
+        ...games
+          .filter((g) =>
+            [g.white_username, g.black_username].some((n) =>
+              ["hugemudraven", "oo09080983"].includes(n.toLowerCase()),
+            ),
+          )
+          .map((g) => JSON.stringify([g.source, g.time_control])),
+      ]),
+    ].sort(
       (a, b) =>
         valid.filter((d) => reportScope(d) === b).length -
         valid.filter((d) => reportScope(d) === a).length,
     ),
     selected = scopes.includes(scope) ? scope : scopes[0] || "",
-    r = makeReport(data, selected, limit, color);
+    selectedIds = new Set(
+      games
+        .filter(
+          (g) =>
+            JSON.stringify([g.source, g.time_control]) === selected &&
+            [g.white_username, g.black_username].some((n) =>
+              ["hugemudraven", "oo09080983"].includes(n.toLowerCase()),
+            ),
+        )
+        .sort((a, b) => b.played_at.localeCompare(a.played_at) || b.id - a.id)
+        .slice(0, limit)
+        .map((g) => g.id),
+    ),
+    r = makeReport(
+      data.filter((d) => selectedIds.has(d.game.id)),
+      selected,
+      limit,
+      color,
+    );
   function download() {
     const url = URL.createObjectURL(
-      new Blob([reportMarkdown(r)], { type: "text/markdown;charset=utf-8" }),
+      new Blob([reportMarkdown(r) + extendedReportMarkdown(r)], {
+        type: "text/markdown;charset=utf-8",
+      }),
     );
     const a = document.createElement("a");
     a.href = url;
@@ -28,14 +76,15 @@ export function PersonalReport({ data, open }: Props) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   return (
-    <details className="personal-report card">
+    <details className="personal-report card" open>
       <summary>
         <strong>📊 我的個人分析報告</strong>
         <span> 從多盤對局找到下一個改善重點</span>
       </summary>
       <section aria-label="個人分析報告">
         <p>
-          先看樣本，再看弱點。只使用已完成的真實分析，不把練習答題率當成實戰棋力。
+          先看樣本，再看弱點。只使用已完成的真實分析；ChessForge
+          負責報告與復盤，練習前往 Lichess。
         </p>
         <div className="report-filters">
           <label>
@@ -62,7 +111,7 @@ export function PersonalReport({ data, open }: Props) {
             >
               {[20, 40, 100].map((n) => (
                 <option key={n} value={n}>
-                  最近 {n} 盤已分析對局
+                  最近 {n} 盤對局
                 </option>
               ))}
             </select>
@@ -83,6 +132,21 @@ export function PersonalReport({ data, open }: Props) {
             下載我的報告
           </button>
         </div>
+        <button
+          className="primary"
+          disabled={busy || !selected}
+          onClick={() => generate(selected, limit)}
+        >
+          ✦ 生成／更新這組 {limit} 盤報告
+        </button>
+        {progress && (
+          <p role="status">
+            {progress} <button onClick={stop}>停止分析</button>
+          </p>
+        )}
+        <p>
+          生成報告會分析此群組最新對局中尚未完成的棋局，重用已有結果。請保持頁面開啟；可停止後再次生成以繼續。
+        </p>
         <p>
           <strong>
             {r.data.length} 盤 · {r.own} 個己方走法 · {r.wins} 勝 {r.draws} 和{" "}
@@ -95,10 +159,10 @@ export function PersonalReport({ data, open }: Props) {
         </p>
         {r.data.length < 10 && (
           <p className="notice">
-            樣本不足 10 盤：先用下方「分析最近 5
-            盤」累積資料，暫不判定固定強弱。
+            樣本不足 10 盤：按「生成／更新報告」累積資料，暫不判定固定強弱。
           </p>
         )}
+        <ReportOverview report={r} open={open} />
         <div className="report-metrics">
           {r.metrics.map((m) => (
             <article key={m.id}>
@@ -118,17 +182,32 @@ export function PersonalReport({ data, open }: Props) {
             <p>報告尚未擷取並驗證逐步時鐘，不從勝負猜測你是否時間不足。</p>
           </article>
         </div>
-        <h3>先做這幾件事</h3>
+        <h3>根據你的弱點，去 Lichess 哪裡練？</h3>
         {r.priorities.length ? (
           r.priorities.map((g) => (
             <p key={g.id}>
               <strong>{g.name}</strong> · {g.count} 個局面／{g.games} 盤：
               {g.tip}
+              <br />
+              <a
+                href={lichessResources[g.id].url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                前往 Lichess：{lichessResources[g.id].label} ↗
+              </a>
+              <br />
+              <small>{lichessResources[g.id].how}</small>
             </p>
           ))
         ) : (
           <p>目前沒有足夠錯步證據可安排優先項目。</p>
         )}
+        <p>
+          建議先復盤下方實例，再選一個對應主題做 5–10
+          題，最後回到自己的棋局檢查同類問題。連結不會傳送你的棋譜，也不會自動同步
+          Lichess 練習成績。
+        </p>
         <div className="report-links">
           {r.picks.map((p) => (
             <button
