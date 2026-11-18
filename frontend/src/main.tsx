@@ -253,14 +253,10 @@ function App() {
         </div>
       </header>
       <main>
-        <div className="intro">
+        <div className={detail ? "intro" : "intro home-intro"}>
           <div>
             <div className="eyebrow">YOUR PERSONAL CHESS WORKSHOP</div>
-            <h1>
-              {detail
-                ? "每一步，都有值得發現的事。"
-                : "從下過的棋，找到進步的方向。"}
-            </h1>
+            <h1>{detail ? "每一步，都有值得發現的事。" : "我的棋局與復盤"}</h1>
             <p>真實引擎分析 · 繁體中文解說 · 完全免費</p>
           </div>
           <button
@@ -298,116 +294,122 @@ function App() {
         />
         {!detail ? (
           <>
-            <section
-              className="import"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                upload(e.dataTransfer.files);
-              }}
-            >
-              <div className="upload-icon">♙</div>
-              <h2>你的棋局，就是最好的教材</h2>
-              <p>拖放 PGN 到這裡，或選擇單盤／多盤棋譜</p>
-              <input
-                aria-label="選擇 PGN"
-                ref={input}
-                type="file"
-                accept=".pgn"
-                multiple
-                hidden
-                onChange={(e) => upload(e.target.files)}
-              />
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() => input.current?.click()}
+            <details className="library-section">
+              <summary>匯入棋譜檔案</summary>
+              <section
+                className="import"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  upload(e.dataTransfer.files);
+                }}
               >
-                {busy ? "處理中…" : "＋ 匯入 PGN"}
-              </button>
-              <p className="muted">
-                只接受已結束對局。棋譜與分析留在你的裝置上。
-              </p>
-              <details className="paste-pgn">
-                <summary>或直接貼上 PGN</summary>
-                <textarea
-                  aria-label="貼上 PGN"
-                  value={pastedPGN}
-                  onChange={(e) => setPastedPGN(e.target.value)}
-                  placeholder="[Event …]"
+                <div className="upload-icon">♙</div>
+                <h2>你的棋局，就是最好的教材</h2>
+                <p>拖放 PGN 到這裡，或選擇單盤／多盤棋譜</p>
+                <input
+                  aria-label="選擇 PGN"
+                  ref={input}
+                  type="file"
+                  accept=".pgn"
+                  multiple
+                  hidden
+                  onChange={(e) => upload(e.target.files)}
                 />
                 <button
-                  disabled={busy || !pastedPGN.trim()}
-                  onClick={() =>
-                    act(async () => {
-                      const r = await api("/import", { pgn: pastedPGN });
-                      await refresh();
-                      setNotice(
-                        `已匯入 ${r.imported} 盤，略過 ${r.duplicates} 盤重複棋局。`,
-                      );
-                      setPastedPGN("");
-                    })
-                  }
+                  className="primary"
+                  disabled={busy}
+                  onClick={() => input.current?.click()}
                 >
-                  匯入貼上的棋譜
+                  {busy ? "處理中…" : "＋ 匯入 PGN"}
                 </button>
-              </details>
-            </section>
-            <div className="section-title">
-              <h2>
-                最近對局 <span>{games.length}</span>
-              </h2>
-              <input
-                aria-label="搜尋對手"
-                placeholder="搜尋棋手…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <div className="games">
-              {games
-                .filter((g) =>
-                  (g.white_username + g.black_username)
-                    .toLowerCase()
-                    .includes(search.toLowerCase()),
-                )
-                .sort(
-                  (a, b) =>
-                    Number(isRapid(b.time_control)) -
-                      Number(isRapid(a.time_control)) ||
-                    b.played_at.localeCompare(a.played_at) ||
-                    b.id - a.id,
-                )
-                .map((g) => (
-                  <button
-                    className="game"
-                    key={g.id}
-                    onClick={() => act(() => select(g.id))}
-                  >
-                    <div className="game-icon">♟</div>
-                    <div>
-                      <strong>
-                        {g.white_username} <em>vs</em> {g.black_username}
-                      </strong>
-                      <small>
-                        {g.played_at} ·{" "}
-                        {isRapid(g.time_control) ? "中速棋 · " : ""}
-                        {g.time_control} · {g.source}
-                      </small>
-                    </div>
-                    <span className="result">{g.result}</span>
-                    <span className="status">
-                      {g.run ? statusName(g.run.status) : "尚未分析"}
-                    </span>
-                    <b>↗</b>
-                  </button>
-                ))}
-              {games.length === 0 && (
-                <p className="empty">
-                  還沒有棋局。匯入你的第一份 PGN，開始復盤。
+                <p className="muted">
+                  只接受已結束對局。棋譜與分析留在你的裝置上。
                 </p>
-              )}
-            </div>
+                <details className="paste-pgn">
+                  <summary>或直接貼上 PGN</summary>
+                  <textarea
+                    aria-label="貼上 PGN"
+                    value={pastedPGN}
+                    onChange={(e) => setPastedPGN(e.target.value)}
+                    placeholder="[Event …]"
+                  />
+                  <button
+                    disabled={busy || !pastedPGN.trim()}
+                    onClick={() =>
+                      act(async () => {
+                        const r = await api("/import", { pgn: pastedPGN });
+                        await refresh();
+                        setNotice(
+                          `已匯入 ${r.imported} 盤，略過 ${r.duplicates} 盤重複棋局。`,
+                        );
+                        setPastedPGN("");
+                      })
+                    }
+                  >
+                    匯入貼上的棋譜
+                  </button>
+                </details>
+              </section>
+            </details>
+            <details className="library-section">
+              <summary>我的對局 · {games.length} 盤</summary>
+              <div className="section-title">
+                <h2>
+                  最近對局 <span>{games.length}</span>
+                </h2>
+                <input
+                  aria-label="搜尋對手"
+                  placeholder="搜尋棋手…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="games">
+                {games
+                  .filter((g) =>
+                    (g.white_username + g.black_username)
+                      .toLowerCase()
+                      .includes(search.toLowerCase()),
+                  )
+                  .sort(
+                    (a, b) =>
+                      Number(isRapid(b.time_control)) -
+                        Number(isRapid(a.time_control)) ||
+                      b.played_at.localeCompare(a.played_at) ||
+                      b.id - a.id,
+                  )
+                  .map((g) => (
+                    <button
+                      className="game"
+                      key={g.id}
+                      onClick={() => act(() => select(g.id))}
+                    >
+                      <div className="game-icon">♟</div>
+                      <div>
+                        <strong>
+                          {g.white_username} <em>vs</em> {g.black_username}
+                        </strong>
+                        <small>
+                          {g.played_at} ·{" "}
+                          {isRapid(g.time_control) ? "中速棋 · " : ""}
+                          {g.time_control} · {g.source}
+                        </small>
+                      </div>
+                      <span className="result">{g.result}</span>
+                      <span className="status">
+                        {g.run ? statusName(g.run.status) : "尚未分析"}
+                      </span>
+                      <b>↗</b>
+                    </button>
+                  ))}
+                {games.length === 0 && (
+                  <p className="empty">
+                    還沒有棋局。匯入你的第一份 PGN，開始復盤。
+                  </p>
+                )}
+              </div>
+            </details>
           </>
         ) : (
           <>
@@ -421,7 +423,7 @@ function App() {
                   refresh().catch((e) => setError(e.message));
                 }}
               >
-                ← 棋局列表
+                ← 我的報告
               </button>
               <span>
                 {detail.game.white_username} <em>vs</em>{" "}
@@ -433,9 +435,9 @@ function App() {
                   value={mode}
                   onChange={(e) => setMode(e.target.value)}
                 >
-                  <option value="instant">速覽 · 深度上限 8 · 單一候選</option>
-                  <option value="quick">快速 · 深度上限 12</option>
-                  <option value="deep">深入 · 深度上限 18</option>
+                  <option value="instant">速覽</option>
+                  <option value="quick">快速分析</option>
+                  <option value="deep">深入分析</option>
                 </select>
                 <button
                   className="primary"
@@ -514,7 +516,7 @@ function App() {
                       : detail.game.black_username}
                   </span>
                   <small>
-                    {ply} / {detail.moves.length} 半步
+                    第 {Math.ceil(ply / 2)} 回合
                   </small>
                 </div>
                 <div className="navigation">
@@ -576,7 +578,7 @@ function App() {
                     ))}
                   </div>
                 )}
-                <section className="chart card">
+                <details className="chart card"><summary>查看局面走勢</summary>
                   <div className="section-title">
                     <h3>局面評估</h3>
                     <small>白方視角 · ±10 兵截斷顯示</small>
@@ -638,7 +640,7 @@ function App() {
                       );
                     })}
                   </svg>
-                </section>
+                </details>
               </section>
               <aside>
                 <section className="card coach">
@@ -646,7 +648,7 @@ function App() {
                     <h2>✦ 復盤教練</h2>
                     <span className="muted">規則與引擎證據</span>
                   </div>
-                  {run && (
+                  {run && run.status !== "completed" && (
                     <div className="progress">
                       <div>
                         <span>
@@ -744,7 +746,7 @@ function App() {
                   </div>
                 </details>
                 {analyses.length > 0 && (
-                  <section className="card summary">
+                  <details className="card summary"><summary>查看其他關鍵轉折</summary>
                     <h3>
                       你的關鍵轉折{" "}
                       {run?.status !== "completed" && "（分析尚未完成）"}
@@ -771,7 +773,7 @@ function App() {
                     <p className="muted">
                       改善重點：先重看損失最大的棋步，播放最佳變化，再回到失誤前自行嘗試。
                     </p>
-                  </section>
+                  </details>
                 )}
               </aside>
             </div>

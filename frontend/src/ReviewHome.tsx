@@ -1,13 +1,9 @@
+import { selectReportGames } from "./reportSelection";
 import { useEffect, useRef, useState } from "react";
 import { PersonalReport } from "./PersonalReport";
-import { Game, labels } from "./types";
+import { Game } from "./types";
 import { accounts, Platform } from "./sync";
-import {
-  buildReview,
-  choosePositions,
-  Category,
-  ReviewedGame,
-} from "./weaknesses";
+import { ReviewedGame } from "./weaknesses";
 type Props = {
   games: Game[];
   hidden: boolean;
@@ -17,7 +13,6 @@ type Props = {
 };
 export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
   const [data, setData] = useState<ReviewedGame[]>([]),
-    [category, setCategory] = useState<Category | "all">("all"),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [syncing, setSyncing] = useState<Platform | null>(null),
@@ -29,12 +24,6 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
     cancel = useRef(false),
     currentRun = useRef<number | null>(null),
     syncLock = useRef(false);
-  const review = buildReview(data);
-  const picks = choosePositions(
-    review.positions.filter(
-      (p) => category === "all" || p.category === category,
-    ),
-  );
   async function reloadReview() {
     setData(await api("/review-data"));
   }
@@ -81,30 +70,11 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
     let done = 0,
       failed = 0;
     const completed = new Set(data.map((d) => d.game.id));
-    const queue = games
-      .filter(
-        (g) =>
-          ((!reportGroup && !completed.has(g.id)) ||
-            JSON.stringify([g.source, g.time_control]) === reportGroup) &&
-          [g.white_username, g.black_username].some((n) =>
-            ["hugemudraven", "oo09080983"].includes(n.toLowerCase()),
-          ),
-      )
-      .sort((a, b) => {
-        const rapid = (s: string) => {
-          const n = Number(s.split("+")[0]);
-          return n >= 600 && n < 3600 ? 1 : 0;
-        };
-        return (
-          rapid(b.time_control) - rapid(a.time_control) ||
-          b.played_at.localeCompare(a.played_at) ||
-          b.id - a.id
-        );
-      })
-      .slice(0, count)
-      .filter((g) => !completed.has(g.id));
+    const queue = selectReportGames(games, reportGroup || "all", count).filter(
+      (g) => !completed.has(g.id),
+    );
     if (!queue.length) {
-      setMessage("目前對局已分析完成，請先同步或匯入更多棋局。");
+      setMessage("這個範圍已有分析結果，可以直接查看下方報告。");
       return;
     }
     try {
@@ -161,43 +131,48 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
     ) : null;
   return (
     <section className="weakness-home">
-      <div className="sync-strip">
+      <div className="simple-sync">
         <div>
-          <strong>連接你的公開對局</strong>
-          <small>
-            Chess.com · {accounts.chesscom}　／　Lichess · {accounts.lichess}
-          </small>
-          <label>
-            <input
-              type="checkbox"
-              checked={auto}
-              onChange={(e) => {
-                setAuto(e.target.checked);
-                localStorage.setItem(
-                  "autoSyncChesscom",
-                  String(e.target.checked),
-                );
-                if (e.target.checked) void sync("chesscom");
-              }}
-            />
-            開啟頁面時自動同步 Chess.com（最多每 30 分鐘一次）
-          </label>
+          <strong>我的公開棋局</strong>
+          <p>Hugemudraven · oo09080983</p>
         </div>
-        <div className="sync-actions">
-          <button disabled={!!syncing} onClick={() => sync("chesscom")}>
-            {syncing === "chesscom" ? "同步中…" : "同步 Chess.com"}
-          </button>
-          <button disabled={!!syncing} onClick={() => sync("lichess")}>
-            {syncing === "lichess" ? "同步中…" : "同步 Lichess"}
-          </button>
-        </div>
+        <button
+          disabled={!!syncing}
+          onClick={async () => {
+            await sync("chesscom");
+            await sync("lichess");
+          }}
+        >
+          {syncing ? "正在更新…" : "↻ 更新棋局"}
+        </button>
       </div>
-      <p className="sync-note">
-        最近 3 個有棋局的月份、最多 200 盤 Chess.com；Lichess 最近 100
-        盤。只下載已結束的標準棋局。
-        {localStorage.getItem("lastSync:chesscom") &&
-          ` 上次成功同步：${localStorage.getItem("lastSync:chesscom")}`}
-      </p>
+      <details className="quiet-details">
+        <summary>帳號與同步設定</summary>
+        <label>
+          <input
+            type="checkbox"
+            checked={auto}
+            onChange={(e) => {
+              setAuto(e.target.checked);
+              localStorage.setItem(
+                "autoSyncChesscom",
+                String(e.target.checked),
+              );
+            }}
+          />
+          開啟時自動更新 Chess.com
+        </label>
+        <p>
+          Chess.com 最近 3 個有棋局月份、最多 200 盤；Lichess 最近 100
+          盤。手動更新會讀取兩個帳號。只匯入已結束棋局。
+        </p>
+        <button disabled={!!syncing} onClick={() => sync("chesscom")}>
+          只更新 Chess.com
+        </button>
+        <button disabled={!!syncing} onClick={() => sync("lichess")}>
+          只更新 Lichess
+        </button>
+      </details>
       {error && (
         <div role="alert" className="alert">
           {error}
@@ -219,96 +194,6 @@ export function ReviewHome({ games, hidden, api, refresh, open }: Props) {
           progress={batch}
           stop={() => void stop()}
         />
-      </div>
-      <div className="review-evidence">
-        <div className="section-title">
-          <div>
-            <div className="eyebrow">FOCUS ON YOUR NEXT IMPROVEMENT</div>
-            <h2>你的弱點，從自己的棋局找</h2>
-          </div>
-          <button
-            className="primary"
-            disabled={!!batch || !!syncing || !games.length}
-            onClick={() => batchAnalyze()}
-          >
-            ✦ 分析最近 5 盤，幫我挑局面
-          </button>
-        </div>
-        <p>
-          已分析你的 {review.analyzedGames} 盤、{review.ownMoves} 步，找到{" "}
-          {review.positions.length}{" "}
-          個值得重看的局面。只統計你的走法；這是目前樣本，不是固定能力評分。
-        </p>
-        {batch && (
-          <div className="notice" role="status">
-            {batch} <button onClick={stop}>停止分析</button>
-            <small>分析在本機進行，請保持頁面開啟。</small>
-          </div>
-        )}
-        <div className="weakness-grid">
-          {review.groups.map((g) => (
-            <button
-              key={g.id}
-              className={`weakness-card ${category === g.id ? "active" : ""}`}
-              onClick={() => setCategory(category === g.id ? "all" : g.id)}
-            >
-              <span>{g.name}</span>
-              <strong>
-                {g.count}
-                <small> 個局面</small>
-              </strong>
-              <small>
-                出現在 {g.games} 盤 ·{" "}
-                {["opening", "middlegame", "endgame"].includes(g.id)
-                  ? "按階段整理"
-                  : "有局面證據"}
-              </small>
-              <p>{g.tip}</p>
-            </button>
-          ))}
-        </div>
-        <div className="section-title">
-          <h3>
-            {category === "all" ? "優先復盤這幾個局面" : "這個項目的復盤局面"}
-          </h3>
-          <button onClick={() => setCategory("all")}>顯示全部</button>
-        </div>
-        <div className="position-grid">
-          {picks.map((p) => (
-            <button
-              className="position-card"
-              key={`${p.game.id}-${p.move.id}`}
-              onClick={() => open(p.game.id, p.move.ply, p.runId)}
-            >
-              <div>
-                <span className={`badge ${p.analysis.classification}`}>
-                  {labels[p.analysis.classification]}
-                </span>
-                <small>{p.game.played_at}</small>
-              </div>
-              <strong>
-                {Math.ceil(p.move.ply / 2)}
-                {p.move.ply % 2 ? "." : "…"} {p.move.san} →{" "}
-                {p.analysis.best_move_san}
-              </strong>
-              <small>
-                {p.game.white_username} vs {p.game.black_username}
-              </small>
-              <p>{p.evidence}</p>
-              <footer>
-                估計勝算損失 {p.analysis.win_chance_loss.toFixed(1)} 個百分點{" "}
-                <b>前往復盤 ↗</b>
-              </footer>
-            </button>
-          ))}
-        </div>
-        {!picks.length && (
-          <div className="empty">
-            {review.ownMoves
-              ? "這個項目目前沒有達到失誤門檻的局面。"
-              : "先同步對局，再按上方的分析按鈕，系統就會從你的棋譜挑出重點。"}
-          </div>
-        )}
       </div>
     </section>
   );

@@ -1,10 +1,11 @@
-import { lichessResources } from "./lichessResources";
+import { useState } from "react";
+import { Game } from "./types";
+import { ReviewedGame, buildReview } from "./weaknesses";
+import { makeReport, reportScope, reportMarkdown } from "./report";
 import { extendedReportMarkdown } from "./reportMetrics";
 import { ReportOverview } from "./ReportOverview";
-import { Game } from "./types";
-import { useState } from "react";
-import { ReviewedGame } from "./weaknesses";
-import { makeReport, reportGames, reportScope, reportMarkdown } from "./report";
+import { lichessResources } from "./lichessResources";
+import { selectReportGames, scopeLabel } from "./reportSelection";
 type Props = {
   data: ReviewedGame[];
   games: Game[];
@@ -16,53 +17,30 @@ type Props = {
 };
 export function PersonalReport({
   data,
-  open,
   games,
   generate,
   busy,
   progress,
   stop,
+  open,
 }: Props) {
-  const [scope, setScope] = useState(""),
-    [limit, setLimit] = useState(40),
-    [color, setColor] = useState<"all" | "w" | "b">("all");
-  const valid = reportGames(data),
-    scopes = [
-      ...new Set([
-        ...valid.map(reportScope),
-        ...games
-          .filter((g) =>
-            [g.white_username, g.black_username].some((n) =>
-              ["hugemudraven", "oo09080983"].includes(n.toLowerCase()),
-            ),
-          )
-          .map((g) => JSON.stringify([g.source, g.time_control])),
-      ]),
-    ].sort(
-      (a, b) =>
-        valid.filter((d) => reportScope(d) === b).length -
-        valid.filter((d) => reportScope(d) === a).length,
+  const [scope, setScope] = useState("all"),
+    [limit, setLimit] = useState(0);
+  const selected = selectReportGames(games, scope, limit || Infinity),
+    ids = new Set(selected.map((g) => g.id));
+  const r = makeReport(
+    data.filter((d) => ids.has(d.game.id)),
+    scope,
+    Infinity,
+  );
+  const positions = buildReview(r.data).positions;
+  const scopes = [
+    ...new Set(
+      selectReportGames(games).map((g) =>
+        JSON.stringify([g.source, g.time_control]),
+      ),
     ),
-    selected = scopes.includes(scope) ? scope : scopes[0] || "",
-    selectedIds = new Set(
-      games
-        .filter(
-          (g) =>
-            JSON.stringify([g.source, g.time_control]) === selected &&
-            [g.white_username, g.black_username].some((n) =>
-              ["hugemudraven", "oo09080983"].includes(n.toLowerCase()),
-            ),
-        )
-        .sort((a, b) => b.played_at.localeCompare(a.played_at) || b.id - a.id)
-        .slice(0, limit)
-        .map((g) => g.id),
-    ),
-    r = makeReport(
-      data.filter((d) => selectedIds.has(d.game.id)),
-      selected,
-      limit,
-      color,
-    );
+  ];
   function download() {
     const url = URL.createObjectURL(
       new Blob([reportMarkdown(r) + extendedReportMarkdown(r)], {
@@ -71,222 +49,194 @@ export function PersonalReport({
     );
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ChessForge-report-${new Date().toISOString().slice(0, 10)}.md`;
+    a.download = "ChessForge-個人報告.md";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   return (
-    <details className="personal-report card" open>
-      <summary>
-        <strong>📊 我的個人分析報告</strong>
-        <span> 從多盤對局找到下一個改善重點</span>
-      </summary>
-      <section aria-label="個人分析報告">
-        <p>
-          先看樣本，再看弱點。只使用已完成的真實分析；ChessForge
-          負責報告與復盤，練習前往 Lichess。
-        </p>
-        <div className="report-filters">
-          <label>
-            對局群組
-            <select
-              aria-label="報告對局群組"
-              value={selected}
-              onChange={(e) => setScope(e.target.value)}
-            >
-              {!scopes.length && <option value="">尚無完整分析</option>}
-              {scopes.map((s) => (
-                <option key={s} value={s}>
-                  {JSON.parse(s).join(" · ")}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            範圍
-            <select
-              aria-label="報告樣本數"
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-            >
-              {[20, 40, 100].map((n) => (
-                <option key={n} value={n}>
-                  最近 {n} 盤對局
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            執棋
-            <select
-              aria-label="報告執棋顏色"
-              value={color}
-              onChange={(e) => setColor(e.target.value as typeof color)}
-            >
-              <option value="all">白黑全部</option>
-              <option value="w">執白</option>
-              <option value="b">執黑</option>
-            </select>
-          </label>
-          <button onClick={download} disabled={!r.data.length}>
-            下載我的報告
-          </button>
+    <section
+      className="personal-report card simple-report"
+      aria-label="個人分析報告"
+    >
+      <div className="report-lead">
+        <div>
+          <span className="eyebrow">我的復盤報告</span>
+          <h2>
+            {r.data.length
+              ? "下一盤，先改善這些地方。"
+              : "看懂你的問題，從這裡開始。"}
+          </h2>
+          <p>
+            {r.data.length
+              ? `已從 ${r.data.length} 盤棋整理出值得重看的時刻。`
+              : "讓引擎看過你的棋局，再用白話告訴你該注意什麼。"}
+          </p>
         </div>
         <button
           className="primary"
-          disabled={busy || !selected}
-          onClick={() => generate(selected, limit)}
+          disabled={busy || !selected.length}
+          onClick={() => generate(scope, selected.length)}
         >
-          ✦ 生成／更新這組 {limit} 盤報告
+          {progress
+            ? "正在整理報告…"
+            : r.data.length
+              ? "更新我的報告"
+              : "產生我的報告"}
         </button>
-        {progress && (
-          <p role="status">
-            {progress} <button onClick={stop}>停止分析</button>
-          </p>
-        )}
-        <p>
-          生成報告會分析此群組最新對局中尚未完成的棋局，重用已有結果。請保持頁面開啟；可停止後再次生成以繼續。
-        </p>
-        <p>
-          <strong>
-            {r.data.length} 盤 · {r.own} 個己方走法 · {r.wins} 勝 {r.draws} 和{" "}
-            {r.data.length - r.wins - r.draws} 負
-          </strong>
-          <br />
-          {r.data[r.data.length - 1]?.game.played_at || "—"} ～{" "}
-          {r.data[0]?.game.played_at || "—"}
-          。此範圍只代表已分析樣本，不代表所有匯入棋局。
-        </p>
-        {r.data.length < 10 && (
-          <p className="notice">
-            樣本不足 10 盤：按「生成／更新報告」累積資料，暫不判定固定強弱。
-          </p>
-        )}
-        <ReportOverview report={r} open={open} />
-        <div className="report-metrics">
-          {r.metrics.map((m) => (
-            <article key={m.id}>
-              <h3>{m.label}</h3>
-              <strong>{m.d ? `${m.n} / ${m.d}` : "—"}</strong>
-              <p>{m.d ? m.unit : "目前沒有符合條件的樣本"}</p>
-              <details>
-                <summary>怎麼計算／怎麼改善</summary>
-                <p>{m.definition}</p>
-                <p>{m.advice}</p>
-              </details>
-            </article>
-          ))}
-          <article>
-            <h3>時間管理</h3>
-            <strong>尚未評分</strong>
-            <p>報告尚未擷取並驗證逐步時鐘，不從勝負猜測你是否時間不足。</p>
-          </article>
+      </div>
+      <p className="muted">
+        {scopeLabel(scope)}
+        {limit ? ` · 最近 ${limit} 盤` : ""} · 已完成 {r.data.length}／
+        {selected.length} 盤
+        {!selected.length
+          ? "，先更新棋局或匯入 PGN。"
+          : "。已有分析會直接重用。"}
+      </p>
+      {progress && (
+        <div className="notice" role="status">
+          {progress}
+          <p>請保持頁面開啟。你可以先看已完成的結果。</p>
+          <button onClick={stop}>暫停，之後繼續</button>
         </div>
-        <h3>根據你的弱點，去 Lichess 哪裡練？</h3>
-        {r.priorities.length ? (
-          r.priorities.map((g) => (
-            <p key={g.id}>
-              <strong>{g.name}</strong> · {g.count} 個局面／{g.games} 盤：
-              {g.tip}
-              <br />
-              <a
-                href={lichessResources[g.id].url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                前往 Lichess：{lichessResources[g.id].label} ↗
-              </a>
-              <br />
-              <small>{lichessResources[g.id].how}</small>
-            </p>
-          ))
-        ) : (
-          <p>目前沒有足夠錯步證據可安排優先項目。</p>
-        )}
-        <p>
-          建議先復盤下方實例，再選一個對應主題做 5–10
-          題，最後回到自己的棋局檢查同類問題。連結不會傳送你的棋譜，也不會自動同步
-          Lichess 練習成績。
-        </p>
-        <div className="report-links">
-          {r.picks.map((p) => (
-            <button
-              key={p.move.id}
-              onClick={() => open(p.game.id, p.move.ply, p.runId)}
+      )}
+      <details className="quiet-details">
+        <summary>調整範圍</summary>
+        <div className="report-filters">
+          <label>
+            棋局
+            <select
+              aria-label="報告對局範圍"
+              value={scope}
+              disabled={busy}
+              onChange={(e) => setScope(e.target.value)}
             >
-              {p.game.played_at} · {p.game.white_username} vs{" "}
-              {p.game.black_username} · {Math.ceil(p.move.ply / 2)}
-              {p.move.ply % 2 ? "." : "…"} {p.move.san} → 復盤
-            </button>
-          ))}
-        </div>
-        <h3>優勢與劣勢的實戰例子</h3>
-        {r.outcomes.length ? (
-          r.outcomes.map((x, i) => (
-            <button
-              key={i}
-              onClick={() => open(x.d.game.id, x.ply, x.d.run.id)}
-            >
-              {x.kind} · {x.d.game.played_at} · 第 {Math.ceil(x.ply / 2)} 回合 ↗
-            </button>
-          ))
-        ) : (
-          <p>目前沒有符合門檻的例子。</p>
-        )}
-        <h3>常見開局與結果</h3>
-        <div className="report-table">
-          <table>
-            <thead>
-              <tr>
-                <th>開局／執棋</th>
-                <th>樣本與結果</th>
-                <th>開局每步平均損失</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.openings.map((o) => (
-                <tr key={o.color + o.name}>
-                  <td>
-                    <button onClick={() => open(o.gameId, o.ply, o.runId)}>
-                      執{o.color} · {o.name}
-                    </button>
-                  </td>
-                  <td>
-                    {o.games} 盤 · {o.wins} 勝 {o.draws} 和{" "}
-                    {o.games - o.wins - o.draws} 負
-                  </td>
-                  <td>
-                    {o.own ? (o.loss / o.own).toFixed(1) : "—"} 個估計勝算百分點
-                  </td>
-                </tr>
+              <option value="all">全部對局（預設）</option>
+              {scopes.map((s) => (
+                <option key={s} value={s}>
+                  {scopeLabel(s)}
+                </option>
               ))}
-            </tbody>
-          </table>
+            </select>
+          </label>
+          <label>
+            數量
+            <select
+              aria-label="報告樣本數"
+              value={limit}
+              disabled={busy}
+              onChange={(e) => setLimit(Number(e.target.value))}
+            >
+              <option value={0}>全部已匯入對局</option>
+              {[20, 40, 100].map((n) => (
+                <option key={n} value={n}>
+                  最近 {n} 盤
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <p>
-          開局損失只統計前 10
-          回合的己方棋步；勝負也受後續中殘局影響，不能直接當成開局優劣。
-        </p>
-        <h3>同一群組，最近與之前的失誤率</h3>
-        <p>
-          每 100 個己方走法：最近 {r.recent.games} 盤{" "}
-          <strong>{r.recent.rate?.toFixed(1) || "—"}</strong>；之前{" "}
-          {r.previous.games} 盤{" "}
-          <strong>{r.previous.rate?.toFixed(1) || "—"}</strong>。
-          {r.recent.games < 10 || r.previous.games < 10
-            ? "樣本不足，先不判定進步或退步。"
-            : "這是描述性比較，不代表訓練的因果效果。"}
-        </p>
-        <details>
-          <summary>報告方法與限制</summary>
-          <p>
-            不混合平台或時間控制；不與未知的同分段資料比較，不計算虛構綜合分數。不同分析深度仍可能影響結果，速覽報告應再用深入分析確認。
-          </p>
-          {r.engines.map((x) => (
-            <p key={x}>{x}</p>
-          ))}
-        </details>
-      </section>
-    </details>
+      </details>
+      {!!r.data.length && (
+        <>
+          <div className="insight-grid">
+            {r.priorities.map((g, i) => {
+              const p = positions.find((p) => p.category === g.id);
+              return (
+                <article className="insight-card" key={g.id}>
+                  <span className="insight-number">重點 {i + 1}</span>
+                  <h3>{g.name}</h3>
+                  <p>
+                    {
+                      (
+                        {
+                          mate: "落子前，先確認對手下一手能不能將死你。",
+                          undefended:
+                            "檢查被攻擊的棋子，確認被吃後能否安全吃回。",
+                          stalemate:
+                            "領先時，留意對手是否還有合法走法，避免意外逼和。",
+                          opening: "先發展棋子、照顧中心和國王，再急著進攻。",
+                          middlegame:
+                            "先看對手的將軍、吃子和威脅，再決定自己的計畫。",
+                          endgame:
+                            "棋子變少後，仔細檢查國王的位置與兵能否升變。",
+                        } as Record<string, string>
+                      )[g.id]
+                    }
+                  </p>
+                  <small>在 {g.games} 盤棋中找到相關局面</small>
+                  {p && (
+                    <button
+                      className="primary"
+                      onClick={() => open(p.game.id, p.move.ply, p.runId)}
+                    >
+                      查看這一步 →
+                    </button>
+                  )}
+                  <details>
+                    <summary>去 Lichess 怎麼練？</summary>
+                    <p>{lichessResources[g.id].how}</p>
+                    <a
+                      href={lichessResources[g.id].url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {lichessResources[g.id].label} ↗
+                    </a>
+                  </details>
+                </article>
+              );
+            })}
+          </div>
+          {!r.priorities.length && (
+            <p className="empty">
+              目前的分析沒有找到達到門檻的問題局面。新增棋局後再更新報告。
+            </p>
+          )}
+          {r.data.length < 10 && (
+            <p className="muted">
+              目前棋局還少，先看實例，不急著判定固定弱點。
+            </p>
+          )}
+          <details className="report-deep">
+            <summary>查看完整圖表與開局表現</summary>
+            <ReportOverview report={r} open={open} />
+            <h3>依對局類型查看</h3>
+            <p>
+              不同時制分開看；全部對局的總覽只描述這批棋局，不作混合時制的進退步判定。
+            </p>
+            {[...new Set(r.data.map(reportScope))].map((s) => {
+              const part = makeReport(r.data, s, Infinity);
+              return (
+                <details key={s}>
+                  <summary>
+                    {scopeLabel(s)} · {part.data.length} 盤
+                  </summary>
+                  {part.metrics.map((m) => (
+                    <p key={m.id}>
+                      <strong>{m.label}：</strong>
+                      {m.d ? `${m.n}／${m.d} ${m.unit}` : "尚無樣本"}
+                      <br />
+                      {m.definition}
+                    </p>
+                  ))}
+                </details>
+              );
+            })}
+          </details>
+          <div className="report-footer">
+            <button onClick={download}>下載報告</button>
+            <details>
+              <summary>資料與計算方式</summary>
+              <p>
+                只計自己的已結束且完整分析的對局。零步棋局不計入。不同深度可能影響結果；重要決策建議深入復盤。尚無可靠時間管理評分或同級排名。
+              </p>
+              {r.engines.map((x) => (
+                <p key={x}>{x}</p>
+              ))}
+            </details>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

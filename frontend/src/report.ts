@@ -61,7 +61,7 @@ export function makeReport(
   const data = reportGames(input)
     .filter(
       (d) =>
-        reportScope(d) === scope &&
+        (scope === "all" || reportScope(d) === scope) &&
         (color === "all" || playerColor(d) === color),
     )
     .slice(0, limit);

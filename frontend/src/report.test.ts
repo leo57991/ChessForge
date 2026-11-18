@@ -161,3 +161,30 @@ it("overview uses documented rates and does not draw missing evidence as zero", 
   expect(a.find((x) => x.id === "mistakes")?.score).toBe(90);
   expect(a.find((x) => x.id === "conversion")?.score).toBeNull();
 });
+
+import { selectReportGames } from "./reportSelection";
+it("全部報告包含不同來源與時制，保留分組篩選能力", () => {
+  const a = sample(1),
+    b = sample(2, true);
+  b.game.source = "lichess";
+  b.game.time_control = "180";
+  expect(makeReport([a, b], "all", Infinity).data).toHaveLength(2);
+  expect(makeReport([a, b], reportScope(a), Infinity).data).toHaveLength(1);
+});
+it("報告與分析佇列共用全部範圍，排除無關與未結束棋局並取最新 N 盤", () => {
+  const a = sample(1).game,
+    b = sample(2).game,
+    c = sample(3).game,
+    d = sample(4).game;
+  b.source = "lichess";
+  b.time_control = "180";
+  c.result = "*";
+  d.white_username = "Other";
+  expect(selectReportGames([a, b, c, d]).map((g) => g.id)).toEqual([2, 1]);
+  expect(selectReportGames([a, b], "all", 1).map((g) => g.id)).toEqual([2]);
+  expect(
+    selectReportGames([a, b], JSON.stringify(["chesscom", "600"])).map(
+      (g) => g.id,
+    ),
+  ).toEqual([1]);
+});

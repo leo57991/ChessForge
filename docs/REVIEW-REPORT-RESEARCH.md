@@ -35,3 +35,10 @@ Chess.com 官方 [Game Review 教學](https://support.chess.com/en/articles/1032
 依使用者提供的 Aimchess 截圖，採用「總覽→開局白黑比較→具名開局→實戰問題→改善入口」的資訊順序。獨立定義五項實戰比例，不複製其未公開評分公式或虛構同儕基準。第 15 回合採第 30 半步，所有分數換為使用者視角；將死另計，短局不補值。報告固定在所選來源／時制最新 N 盤內，只採完整分析。
 
 依最新產品方向移除內建訓練區，保留舊資料；新流程由 ChessForge 報告與復盤導向免費 Lichess 主題。來源：[主題目錄](https://lichess.org/training/themes)、[開局題目](https://lichess.org/training/openings)、[基礎練習](https://lichess.org/practice)。階段分類不冒稱已證實某種戰術弱點；開局題庫不冒稱完整開局課程。未同步外部練習進度。
+
+
+## 精簡首頁與全部對局
+
+預設從全部已匯入對局產生報告；來源／時制篩選變為進階選項，分析佇列與報告使用同一範圍函式。混合樣本只作描述性摘要；時制統計仍分開，首頁不判定混合樣本的進退步。
+
+參考 [Chess.com 官方設計說明](https://www.chess.com/news/view/game-review-design-update) 中教練解說、關鍵時刻與按需顯示功能的層級安排。首頁只呈現三個改善項目與進入實戰的按鈕；完整圖表、棋局清單、PGN 匯入和計算方式逐層展開。Aimchess 以使用者提供截圖為參考；其公開首頁本次僅回傳 JS 殼，未假稱讀取登入後的新介面。
