@@ -2,13 +2,13 @@ import io, os, re, hashlib, threading, secrets
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-import chess, chess.pgn
+import chess, chess.engine, chess.pgn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from models import Base, engine, Session, Game, Move, Run, Analysis, serialize, now
-from analysis import work, engine_path
+from analysis import work, engine_path, evaluate
 
 from training_store import router as training_router
 
@@ -57,6 +57,7 @@ class ImportBody(BaseModel):
 
 class AnalyzeBody(BaseModel):
     mode: str = "quick"
+    reuse_completed: bool = False
 
 
 def import_pgn(text, source="pgn"):
@@ -116,7 +117,7 @@ def import_pgn(text, source="pgn"):
         parsed.append((g, rows, fingerprint, remote.group(1) if remote else None))
     if not parsed:
         raise ValueError("找不到 PGN 棋局。")
-    imported = 0
+    game_ids = []
     duplicate = 0
     with mutation_lock, Session() as s:
         for g, rows, fingerprint, remote in parsed:
@@ -139,9 +140,9 @@ def import_pgn(text, source="pgn"):
             s.add(obj)
             s.flush()
             s.add_all([Move(game_id=obj.id, **r) for r in rows])
-            imported += 1
+            game_ids.append(obj.id)
         s.commit()
-    return {"imported": imported, "duplicates": duplicate}
+    return {"imported": len(game_ids), "duplicates": duplicate, "game_ids": game_ids}
 
 
 @app.get("/api/health")
@@ -191,17 +192,59 @@ def detail(game_id: int):
         }
 
 
+class TrialBody(BaseModel):
+    game_id: int
+    base_ply: int = Field(ge=0)
+    moves: list[str] = Field(min_length=1, max_length=256)
+
+
+@app.post("/api/review/try")
+def review_trial(body: TrialBody):
+    with Session() as s:
+        game = s.get(Game, body.game_id)
+        if not game or game.result not in ["1-0", "0-1", "1/2-1/2"]:
+            raise HTTPException(404, "找不到已結束對局。")
+        original = s.query(Move).filter_by(game_id=game.id).order_by(Move.ply).all()
+        if body.base_ply > len(original):
+            raise HTTPException(422, "找不到試走起點。")
+        board = chess.pgn.read_game(io.StringIO(game.pgn)).board()
+        for move in original[:body.base_ply]:
+            board.push_uci(move.uci)
+    try:
+        after = board.copy()
+        for uci in body.moves:
+            if not re.fullmatch(r"[a-h][1-8][a-h][1-8][qrbn]?", uci) or after.is_game_over():
+                raise ValueError("invalid continuation")
+            after.push_uci(uci)
+        before = after.copy()
+        before.pop()
+    except ValueError:
+        raise HTTPException(422, "試走路線不合法或局面已結束。")
+    try:
+        with chess.engine.SimpleEngine.popen_uci(engine_path(), timeout=30) as eng:
+            eng.configure({"Threads": 1, "Hash": 32})
+            return {
+                "before": evaluate(eng, before, 14, 0.25, 1)[0],
+                "after": evaluate(eng, after, 14, 0.25, 1)[0],
+            }
+    except (RuntimeError, OSError, chess.engine.EngineError) as exc:
+        raise HTTPException(503, f"試走分析暫時不可用：{exc}")
+
+
 @app.post("/api/games/{game_id}/analyze")
 def analyze(game_id: int, body: AnalyzeBody):
     if body.mode not in ["instant", "quick", "deep"]:
         raise HTTPException(422, "未知分析模式")
-    try:
-        engine_path()
-    except RuntimeError as e:
-        raise HTTPException(503, str(e))
     with mutation_lock, Session() as s:
         if not s.get(Game, game_id):
             raise HTTPException(404, "找不到棋局")
+        if body.reuse_completed:
+            completed = (
+                s.query(Run).filter_by(game_id=game_id, status="completed")
+                .order_by(Run.id.desc()).first()
+            )
+            if completed:
+                return serialize(completed)
         active = (
             s.query(Run)
             .filter(Run.game_id == game_id, Run.status.in_(["running", "queued"]))
@@ -211,6 +254,10 @@ def analyze(game_id: int, body: AnalyzeBody):
             return serialize(active)
         if not s.query(Move).filter_by(game_id=game_id).count():
             raise HTTPException(422, "這盤沒有走法（零步和棋），不需要引擎分析。")
+        try:
+            engine_path()
+        except RuntimeError as e:
+            raise HTTPException(503, str(e))
         r = Run(
             game_id=game_id,
             depth={"instant": 8, "quick": 12, "deep": 18}[body.mode],
@@ -265,7 +312,7 @@ def sync_games(body: SyncBody):
     from sync import fetch_pgn
     try:
         pgn = fetch_pgn(body.source, body.username)
-        return import_pgn(pgn, body.source) if pgn.strip() else {'imported':0,'duplicates':0}
+        return import_pgn(pgn, body.source) if pgn.strip() else {'imported':0,'duplicates':0,'game_ids':[]}
     except ValueError as e:
         raise HTTPException(422, str(e))
 

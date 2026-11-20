@@ -1,3 +1,4 @@
+import { playUci } from "./trial";
 import { Chess } from "chess.js";
 import { Analysis, Detail, Game, Move, PV, Run, Score } from "./types";
 import { emptyTraining, validateTraining, Envelope } from "./training";
@@ -426,6 +427,59 @@ export async function browserAPI(path: string, body?: any): Promise<any> {
       tx.onabort = () => reject(new Error("訓練資料未儲存，請重新載入。"));
     });
   }
+  if (path === "/review/try") {
+    const d = state.details.find((x) => x.game.id === body.game_id);
+    if (!d || !["1-0", "0-1", "1/2-1/2"].includes(d.game.result))
+      throw new Error("找不到已結束對局。");
+    const { base_ply, moves } = body;
+    if (
+      !Number.isInteger(base_ply) ||
+      base_ply < 0 ||
+      base_ply > d.moves.length ||
+      !Array.isArray(moves) ||
+      !moves.length ||
+      moves.length > 256 ||
+      !moves.every(
+        (m) => typeof m === "string" && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m),
+      )
+    )
+      throw new Error("試走路線不合法。");
+    const board = new Chess(d.initial_fen);
+    const history = d.moves.slice(0, base_ply).map((m) => m.uci);
+    for (const uci of history) playUci(board, uci);
+    for (const uci of moves.slice(0, -1)) {
+      if (forcedEnd(board)) throw new Error("這個局面已結束。");
+      playUci(board, uci);
+      history.push(uci);
+    }
+    if (forcedEnd(board)) throw new Error("這個局面已結束。");
+    const last = moves[moves.length - 1];
+    playUci(new Chess(board.fen()), last);
+    const eng = new UCI();
+    try {
+      await eng.init();
+      const [before] = await eng.evaluate(
+        board,
+        d.initial_fen,
+        history,
+        14,
+        250,
+        1,
+      );
+      playUci(board, last);
+      const [after] = await eng.evaluate(
+        board,
+        d.initial_fen,
+        [...history, last],
+        14,
+        250,
+        1,
+      );
+      return { before, after };
+    } finally {
+      eng.close();
+    }
+  }
   if (path === "/training/check") {
     const d = state.details.find((x) => x.game.id === body.game_id);
     if (
@@ -477,8 +531,8 @@ export async function browserAPI(path: string, body?: any): Promise<any> {
     if (body.pgn.length > 10_000_000) throw new Error("檔案超過 10 MB。");
     const parsed = parsePGN(body.pgn),
       ids = new Set(state.details.map(identity));
-    let imported = 0,
-      duplicates = 0;
+    const game_ids: number[] = [];
+    let duplicates = 0;
     for (const p of parsed) {
       if (ids.has(p.identity)) {
         duplicates++;
@@ -492,17 +546,17 @@ export async function browserAPI(path: string, body?: any): Promise<any> {
         runs: [],
       });
       ids.add(p.identity);
-      imported++;
+      game_ids.push(id);
     }
     await save();
-    return { imported, duplicates };
+    return { imported: game_ids.length, duplicates, game_ids };
   }
   if (path === "/sync") {
     const { fetchPublicPGN } = await import("./sync");
     const pgn = await fetchPublicPGN(body.source, body.username);
     return pgn.trim()
       ? browserAPI("/import", { pgn, source: body.source })
-      : { imported: 0, duplicates: 0 };
+      : { imported: 0, duplicates: 0, game_ids: [] };
   }
   if (path === "/review-data")
     return structuredClone(
@@ -528,7 +582,11 @@ export async function browserAPI(path: string, body?: any): Promise<any> {
     if (!d.moves.length) throw new Error("零步和棋沒有需要分析的走法。");
     if (!["instant", "quick", "deep"].includes(body?.mode))
       throw new Error("未知分析模式");
-    if (active) throw new Error("請先完成或取消目前的分析。");
+    const existing =
+      d.runs.find((r) => body.reuse_completed && r.status === "completed") ||
+      d.runs.find((r) => ["queued", "running"].includes(r.status));
+    if (existing) return structuredClone(existing);
+    if (active) throw new Error("另一盤棋正在分析，請稍後再試。");
     const r: Run = {
       id: state.next++,
       game_id: d.game.id,

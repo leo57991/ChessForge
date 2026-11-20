@@ -222,3 +222,44 @@ def test_shared_boundary_search_and_fast_mode(monkeypatch):
         assert len(rows) == 4
         assert all(rows[i].evaluation_after == rows[i+1].evaluation_before for i in range(3))
         assert rows[-1].evaluation_after["mate"] == 0
+
+
+def test_sync_returns_only_new_ids_and_analysis_reuses_completed(monkeypatch):
+    import sync
+    client = TestClient(app)
+    fixture = MATE.replace('[Event "test"]', '[Event "sync"]\n[Round "sync-reuse"]')
+    monkeypatch.setattr(sync, "fetch_pgn", lambda *args: fixture)
+    payload = {"source": "chesscom", "username": "Hugemudraven"}
+    first = client.post("/api/sync", json=payload).json()
+    second = client.post("/api/sync", json=payload).json()
+    assert len(first["game_ids"]) == first["imported"] == 1
+    assert second["game_ids"] == []
+    game_id = first["game_ids"][0]
+    with Session() as session:
+        run = Run(game_id=game_id, depth=12, multipv=3, total=4, status="completed")
+        session.add(run)
+        session.commit()
+        run_id = run.id
+    reused = client.post(f"/api/games/{game_id}/analyze", json={"reuse_completed": True})
+    assert reused.status_code == 200
+    assert reused.json()["id"] == run_id
+    with Session() as session:
+        assert session.query(Run).filter_by(game_id=game_id).count() == 1
+
+
+def test_trial_analyzes_branch_and_preserves_game():
+    client = TestClient(app)
+    fixture = pgn("1. e4 e5", "1-0").replace('[Event "test"]', '[Event "trial"]\n[Round "trial-branch"]')
+    game_id = import_pgn(fixture)["game_ids"][0]
+    path = "/api/review/try"
+    body = {"game_id": game_id, "base_ply": 0, "moves": ["f2f3", "e7e5", "g2g4", "d8h4"]}
+    result = client.post(path, json=body)
+    assert result.status_code == 200, result.text
+    assert result.json()["before"]["pv"][0]["uci"] == "d8h4"
+    assert result.json()["after"]["score"]["mate"] == 0
+    assert not result.json()["after"]["score"]["white_wins"]
+    assert client.post(path, json={**body, "base_ply": 3}).status_code == 422
+    assert client.post(path, json={**body, "moves": ["f2f5"]}).status_code == 422
+    detail = client.get(f"/api/games/{game_id}").json()
+    assert [move["uci"] for move in detail["moves"]] == ["e2e4", "e7e5"]
+    assert detail["runs"] == []

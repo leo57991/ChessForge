@@ -11,10 +11,26 @@ import {
   scoreText,
   pvPositions,
 } from "./types";
-import { browserAPI } from "./offline";
+import { browserAPI, classify } from "./offline";
 import "./style.css";
 import { ReviewCoach, moveIcons, badgePosition } from "./ReviewCoach";
 import { ReviewHome } from "./ReviewHome";
+import { playUci, TrialEvaluation } from "./trial";
+import { TrialCoach } from "./TrialCoach";
+
+type Research = {
+  fen: string;
+  basePly: number;
+  moves: string[];
+  san?: string;
+  before?: string;
+};
+type TrialResult = {
+  research: Research;
+  evaluation?: TrialEvaluation;
+  error?: string;
+};
+
 const browserMode = import.meta.env.VITE_BROWSER_MODE === "true";
 async function api(path: string, body?: unknown) {
   if (browserMode) return browserAPI(path, body);
@@ -44,7 +60,10 @@ function App() {
     [busy, setBusy] = useState(false),
     [orientation, setOrientation] = useState<"white" | "black">("white"),
     [mode, setMode] = useState("quick"),
-    [research, setResearch] = useState<string | null>(null),
+    [research, setResearch] = useState<Research | null>(null),
+    [trialResult, setTrialResult] = useState<TrialResult | null>(null),
+    [trialHint, setTrialHint] = useState(false),
+    [trialRetry, setTrialRetry] = useState(0),
     [pvIndex, setPvIndex] = useState<number | null>(null),
     [lineKind, setLineKind] = useState<"best" | "actual">("best"),
     [selectedSquare, setSelectedSquare] = useState<Square | null>(null),
@@ -56,7 +75,8 @@ function App() {
     );
   const [pastedPGN, setPastedPGN] = useState("");
   const input = useRef<HTMLInputElement>(null),
-    sequence = useRef(0);
+    sequence = useRef(0),
+    trialQueue = useRef<Promise<void>>(Promise.resolve());
   async function refresh() {
     const g = await api("/games");
     setGames(g);
@@ -78,6 +98,7 @@ function App() {
     setDetail(d);
     setPly(position);
     setResearch(null);
+    setTrialHint(false);
     setPvIndex(null);
     setPlaying(false);
     setOrientation(
@@ -119,8 +140,44 @@ function App() {
           Chess,
         )
       : [];
+  const currentTrial = trialResult?.research === research ? trialResult : null;
+  const evaluation = currentTrial?.evaluation;
+  const playedUci = research?.moves[research.moves.length - 1];
+  const trialBest = evaluation?.before.pv[0];
+  const trialLabel =
+    evaluation && research?.before && playedUci
+      ? classify(
+          evaluation.before.score,
+          evaluation.after.score,
+          research.before.split(" ")[1] === "w",
+          trialBest?.uci === playedUci,
+        ).label
+      : null;
   const fen =
-    research || (pvIndex !== null ? pv[pvIndex] : original) || original;
+    (trialHint ? research?.before : research?.fen) ||
+    (pvIndex !== null ? pv[pvIndex] : original) ||
+    original;
+  const gameId = detail?.game.id;
+  useEffect(() => {
+    if (!gameId || !research?.san) return;
+    let stale = false;
+    trialQueue.current = trialQueue.current.then(async () => {
+      if (stale) return;
+      try {
+        const evaluation = await api("/review/try", {
+          game_id: gameId,
+          base_ply: research.basePly,
+          moves: research.moves,
+        });
+        if (!stale) setTrialResult({ research, evaluation });
+      } catch (e) {
+        if (!stale) setTrialResult({ research, error: (e as Error).message });
+      }
+    });
+    return () => {
+      stale = true;
+    };
+  }, [gameId, research, trialRetry]);
   useEffect(() => {
     if (!playing) return;
     const t = setInterval(
@@ -139,6 +196,7 @@ function App() {
   function jump(n: number) {
     setPly(Math.max(0, Math.min(detail?.moves.length || 0, n)));
     setResearch(null);
+    setTrialHint(false);
     setPvIndex(null);
     setPlaying(false);
     setPromotion(null);
@@ -171,14 +229,46 @@ function App() {
   }
   function drop(from: string, to: string, promote?: string) {
     try {
-      const b = new Chess(fen);
+      if (!detail) return false;
+      const basePly =
+        research?.basePly ??
+        (lineKind === "best" && pvIndex !== null ? ply - 1 : ply);
+      const moves = research
+        ? trialHint
+          ? research.moves.slice(0, -1)
+          : research.moves
+        : pvIndex === null
+          ? []
+          : (lineKind === "best" ? a?.principal_variation : a?.actual_variation)
+              ?.slice(0, pvIndex)
+              .map((m) => m.uci) || [];
+      if (moves.length >= 256) return false;
+      const b = new Chess(detail.initial_fen);
+      for (const move of detail.moves.slice(0, basePly)) playUci(b, move.uci);
+      for (const uci of moves) playUci(b, uci);
       const piece = b.get(from as Square);
-      if (!promote && piece?.type === "p" && ["1", "8"].includes(to[1])) {
+      if (
+        !promote &&
+        piece?.type === "p" &&
+        ["1", "8"].includes(to[1]) &&
+        b
+          .moves({ square: from as Square, verbose: true })
+          .some((m) => m.to === to && m.promotion)
+      ) {
         setPromotion({ from, to });
         return false;
       }
-      b.move({ from, to, promotion: promote || "q" });
-      setResearch(b.fen());
+      const before = b.fen();
+      const move = b.move({ from, to, promotion: promote || "q" });
+      setResearch({
+        basePly,
+        moves: [...moves, move.lan],
+        before,
+        san: move.san,
+        fen: b.fen(),
+      });
+      setTrialHint(false);
+      setPromotion(null);
       setPvIndex(null);
       setPlaying(false);
       return true;
@@ -203,6 +293,12 @@ function App() {
       a.best_move_uci.slice(2, 4) as Square,
       "#51c5aa",
     ]);
+  if (trialHint && trialBest)
+    arrows.push([
+      trialBest.uci.slice(0, 2) as Square,
+      trialBest.uci.slice(2, 4) as Square,
+      "#51c5aa",
+    ]);
   const nextKey = detail?.moves.find(
     (m) =>
       m.ply > ply &&
@@ -211,6 +307,7 @@ function App() {
   function showLine(kind: "best" | "actual") {
     setLineKind(kind);
     setResearch(null);
+    setTrialHint(false);
     setPvIndex(0);
     setPlaying(false);
     setSelectedSquare(null);
@@ -498,6 +595,16 @@ function App() {
                     customLightSquareStyle={{ backgroundColor: "#e6eadb" }}
                     animationDuration={150}
                   />
+                  {trialLabel && playedUci && !trialHint && (
+                    <span
+                      className={"board-verdict " + trialLabel}
+                      style={badgePosition(playedUci, orientation)}
+                      role="img"
+                      aria-label={`${research?.san}：${labels[trialLabel]}`}
+                    >
+                      {moveIcons[trialLabel]}
+                    </span>
+                  )}
                   {a && move && !research && pvIndex === null && (
                     <span
                       className={"board-verdict " + a.classification}
@@ -516,7 +623,11 @@ function App() {
                       : detail.game.black_username}
                   </span>
                   <small>
-                    第 {Math.ceil(ply / 2)} 回合
+                    {research
+                      ? "試走變化"
+                      : ply === 0
+                        ? "起始局面"
+                        : `第 ${Math.ceil(ply / 2)} 回合`}
                   </small>
                 </div>
                 <div className="navigation">
@@ -555,6 +666,7 @@ function App() {
                     className="return"
                     onClick={() => {
                       setResearch(null);
+                      setTrialHint(false);
                       setPvIndex(null);
                       setPlaying(false);
                     }}
@@ -578,7 +690,8 @@ function App() {
                     ))}
                   </div>
                 )}
-                <details className="chart card"><summary>查看局面走勢</summary>
+                <details className="chart card">
+                  <summary>查看局面走勢</summary>
                   <div className="section-title">
                     <h3>局面評估</h3>
                     <small>白方視角 · ±10 兵截斷顯示</small>
@@ -642,7 +755,7 @@ function App() {
                   </svg>
                 </details>
               </section>
-              <aside>
+              <aside className="coach-column">
                 <section className="card coach">
                   <div className="section-title">
                     <h2>✦ 復盤教練</h2>
@@ -676,7 +789,25 @@ function App() {
                       </small>
                     </div>
                   )}
-                  {a && move ? (
+                  {research ? (
+                    <TrialCoach
+                      san={research.san}
+                      fen={research.fen}
+                      label={trialLabel}
+                      evaluation={evaluation}
+                      error={currentTrial?.error}
+                      hint={trialHint}
+                      onHint={() => {
+                        setTrialHint(!trialHint);
+                        setSelectedSquare(null);
+                        setPromotion(null);
+                      }}
+                      onRetry={() => {
+                        setTrialResult(null);
+                        setTrialRetry((x) => x + 1);
+                      }}
+                    />
+                  ) : a && move ? (
                     <ReviewCoach
                       key={`${run?.id}-${move.id}`}
                       a={a}
@@ -684,7 +815,12 @@ function App() {
                       onBest={() => showLine("best")}
                       onActual={() => showLine("actual")}
                       onRetry={() => {
-                        setResearch(move.fen_before);
+                        setResearch({
+                          fen: move.fen_before,
+                          basePly: ply - 1,
+                          moves: [],
+                        });
+                        setTrialHint(false);
                         setPvIndex(null);
                         setPlaying(false);
                         setSelectedSquare(null);
@@ -717,36 +853,9 @@ function App() {
                     </div>
                   )}
                 </section>
-                <details className="card moves">
-                  <summary>完整棋譜 · 點選走法跳轉</summary>
-                  <div className="section-title">
-                    <h3>完整棋譜</h3>
-                    <small>點選走法即可跳轉</small>
-                  </div>
-                  <div className="move-list">
-                    {detail.moves.map((m) => {
-                      const x = analyses.find((a) => a.move_id === m.id);
-                      return (
-                        <button
-                          key={m.id}
-                          className={`${ply === m.ply ? "selected" : ""} ${x?.classification || ""}`}
-                          onClick={() => jump(m.ply)}
-                        >
-                          <small>
-                            {Math.ceil(m.ply / 2)}
-                            {m.ply % 2 ? "." : "…"}
-                          </small>{" "}
-                          {m.san}
-                          <span>
-                            {x ? moveIcons[x.classification] || "" : ""}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </details>
                 {analyses.length > 0 && (
-                  <details className="card summary"><summary>查看其他關鍵轉折</summary>
+                  <details className="card summary">
+                    <summary>查看其他關鍵轉折</summary>
                     <h3>
                       你的關鍵轉折{" "}
                       {run?.status !== "completed" && "（分析尚未完成）"}
@@ -776,6 +885,33 @@ function App() {
                   </details>
                 )}
               </aside>
+              <section className="card moves" aria-label="完整棋譜">
+                <div className="section-title">
+                  <h3>完整棋譜</h3>
+                  <small>點選走法即可跳轉</small>
+                </div>
+                <div className="move-list">
+                  {detail.moves.map((m) => {
+                    const x = analyses.find((a) => a.move_id === m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        className={`${ply === m.ply ? "selected" : ""} ${x?.classification || ""}`}
+                        onClick={() => jump(m.ply)}
+                      >
+                        <small>
+                          {Math.ceil(m.ply / 2)}
+                          {m.ply % 2 ? "." : "…"}
+                        </small>{" "}
+                        {m.san}
+                        <span>
+                          {x ? moveIcons[x.classification] || "" : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
           </>
         )}
